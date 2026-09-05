@@ -1,0 +1,6 @@
+{
+  "name": "CodePilot AI",
+  "description": "An AI agent workspace and chat interface featuring real bash terminal, live GitHub connect with OAuth & PAT, repository browser, live preview, multi-model selection, workspace tools, task management, and file explorer.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

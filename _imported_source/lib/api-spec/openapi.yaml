@@ -1,0 +1,85 @@
+openapi: 3.1.0
+info:
+  # Do not change the title, if the title changes, the import paths will be broken
+  title: Api
+  version: 0.1.0
+  description: API specification
+servers:
+  - url: /api
+    description: Base API path
+tags:
+  - name: health
+    description: Health operations
+  - name: workspace
+    description: Workspace file operations
+paths:
+  /healthz:
+    get:
+      operationId: healthCheck
+      tags: [health]
+      summary: Health check
+      description: Returns server health status
+      responses:
+        "200":
+          description: Healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthStatus"
+  /workspace/files:
+    get:
+      operationId: listWorkspaceFiles
+      tags: [workspace]
+      summary: List workspace files
+      description: Returns the source file tree for the current mobile workspace
+      responses:
+        "200":
+          description: Workspace file tree
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkspaceFilesResponse"
+        "401":
+          description: Authentication required
+components:
+  schemas:
+    HealthStatus:
+      type: object
+      properties:
+        status:
+          type: string
+      required:
+        - status
+    WorkspaceFile:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        path:
+          type: string
+        type:
+          type: string
+          enum: [file, directory]
+        size:
+          type: number
+          minimum: 0
+      required:
+        - id
+        - name
+        - path
+        - type
+    WorkspaceFilesResponse:
+      type: object
+      properties:
+        root:
+          type: string
+        files:
+          type: array
+          items:
+            $ref: "#/components/schemas/WorkspaceFile"
+      required:
+        - root
+        - files
+
