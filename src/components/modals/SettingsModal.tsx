@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { X, Sliders, Smartphone, Monitor, Shield, Sparkles } from 'lucide-react';
+import { X, Sliders, Smartphone, Monitor, Shield, Sparkles, Flame, CheckCircle2 } from 'lucide-react';
+import { firebaseConfig } from '../../lib/firebase';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -210,6 +211,41 @@ export function SettingsModal({
                   </div>
                 </>
               )}
+            </div>
+          </div>
+
+          {/* Firebase Cloud Services */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-semibold text-[#e3e3e3] flex items-center gap-1.5">
+                <Flame className="w-3.5 h-3.5 text-amber-400" />
+                <span>Firebase Cloud Services</span>
+              </label>
+              <span className="text-[10px] text-emerald-400 font-semibold flex items-center gap-1">
+                <CheckCircle2 className="w-3 h-3" />
+                Connected
+              </span>
+            </div>
+
+            <div className="p-2.5 rounded-xl bg-[#18191c] border border-[#333538] space-y-1.5 text-[11px]">
+              <div className="flex items-center justify-between">
+                <span className="text-[#8e918f]">Project ID</span>
+                <span className="font-mono text-[#e3e3e3] bg-[#282a2c] px-1.5 py-0.5 rounded text-[10px]">
+                  {firebaseConfig.projectId}
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-[#8e918f]">Auth Domain</span>
+                <span className="font-mono text-[#a8c7fa] truncate max-w-[200px] text-[10px]">
+                  {firebaseConfig.authDomain}
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-[#8e918f]">Analytics ID</span>
+                <span className="font-mono text-[#8e918f] text-[10px]">
+                  {firebaseConfig.measurementId}
+                </span>
+              </div>
             </div>
           </div>
 

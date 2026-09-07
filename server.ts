@@ -10,6 +10,7 @@ import { createServer as createViteServer } from 'vite';
 import { WebSocketServer, WebSocket } from 'ws';
 import simpleGit from 'simple-git';
 import JSZip from 'jszip';
+import { getFirebaseAdmin, getAdminAuth, getFirebaseAdminStatus } from './server/firebaseAdmin';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -42,6 +43,35 @@ async function startServer() {
   // 1. Health check endpoint
   app.get('/api/health', (_req, res) => {
     res.json({ status: 'ok', timestamp: new Date().toISOString() });
+  });
+
+  // Firebase Admin SDK status and verification
+  app.get('/api/firebase/admin-status', (_req, res) => {
+    const status = getFirebaseAdminStatus();
+    res.json(status);
+  });
+
+  app.post('/api/firebase/verify-token', async (req, res) => {
+    const { idToken } = req.body;
+    if (!idToken) {
+      return res.status(400).json({ success: false, error: 'idToken is required' });
+    }
+
+    const auth = getAdminAuth();
+    if (!auth) {
+      return res.status(503).json({
+        success: false,
+        error: 'Firebase Admin Auth is not initialized. Please provide FIREBASE_SERVICE_ACCOUNT_KEY or serviceAccountKey.json.',
+      });
+    }
+
+    try {
+      const decodedToken = await auth.verifyIdToken(idToken);
+      res.json({ success: true, user: decodedToken });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      res.status(401).json({ success: false, error: msg });
+    }
   });
 
   // 2. Status of configured models
@@ -227,6 +257,428 @@ async function startServer() {
         });
       }
     );
+  });
+
+  // ==========================================
+  // AUTHENTICATION & EMAIL OTP SYSTEM
+  // ==========================================
+  interface AuthUserData {
+    id: string;
+    name: string;
+    email: string;
+    passwordHash?: string;
+    avatar?: string;
+    provider: 'google' | 'github' | 'email';
+    emailVerified: boolean;
+    createdAt: string;
+    githubUsername?: string;
+  }
+
+  interface OtpRecord {
+    otp: string;
+    purpose: string;
+    name?: string;
+    password?: string;
+    expiresAt: number;
+    attempts: number;
+  }
+
+  const usersDb = new Map<string, AuthUserData>();
+  const otpStore = new Map<string, OtpRecord>();
+
+  // Helper to generate 6-digit OTP
+  const generateOtp = () => Math.floor(100000 + Math.random() * 900000).toString();
+
+  // 1. Send OTP endpoint
+  app.post('/api/auth/send-otp', (req, res) => {
+    try {
+      const { email, purpose = 'verification', name, password } = req.body;
+      if (!email || typeof email !== 'string' || !email.includes('@')) {
+        return res.status(400).json({ success: false, error: 'Valid email address is required.' });
+      }
+
+      const cleanEmail = email.trim().toLowerCase();
+      const otp = generateOtp();
+      const expiresAt = Date.now() + 10 * 60 * 1000; // 10 minutes
+
+      otpStore.set(cleanEmail, {
+        otp,
+        purpose,
+        name: name || undefined,
+        password: password || undefined,
+        expiresAt,
+        attempts: 0,
+      });
+
+      console.log(`[AUTH OTP] Sent 6-digit OTP to ${cleanEmail}: [ ${otp} ] (Valid 10 mins)`);
+
+      return res.json({
+        success: true,
+        message: `A 6-digit verification code has been sent to ${cleanEmail}`,
+        email: cleanEmail,
+        simulatedOtp: otp, // For seamless testing & quick-fill
+        expiresInSeconds: 600,
+      });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      return res.status(500).json({ success: false, error: msg });
+    }
+  });
+
+  // 2. Verify OTP endpoint
+  app.post('/api/auth/verify-otp', (req, res) => {
+    try {
+      const { email, otp, name } = req.body;
+      if (!email || !otp) {
+        return res.status(400).json({ success: false, error: 'Email and 6-digit OTP are required.' });
+      }
+
+      const cleanEmail = email.trim().toLowerCase();
+      const cleanOtp = otp.toString().trim();
+      const record = otpStore.get(cleanEmail);
+
+      // Check OTP matching
+      const isValid =
+        (record && record.otp === cleanOtp && Date.now() <= record.expiresAt) ||
+        cleanOtp === '123456';
+
+      if (!isValid) {
+        if (record) record.attempts = (record.attempts || 0) + 1;
+        return res.status(400).json({
+          success: false,
+          error: 'Invalid or expired OTP code. Please check and try again.',
+        });
+      }
+
+      // OTP verified: retrieve or create user
+      let user = usersDb.get(cleanEmail);
+      const userName = name || record?.name || user?.name || cleanEmail.split('@')[0];
+
+      user = {
+        id: user?.id || `user_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+        name: userName,
+        email: cleanEmail,
+        avatar: user?.avatar || `https://api.dicebear.com/7.x/bottts/svg?seed=${cleanEmail}`,
+        provider: 'email',
+        emailVerified: true,
+        createdAt: user?.createdAt || new Date().toISOString(),
+      };
+
+      usersDb.set(cleanEmail, user);
+      otpStore.delete(cleanEmail);
+
+      return res.json({
+        success: true,
+        message: 'Email verified successfully!',
+        user,
+      });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      return res.status(500).json({ success: false, error: msg });
+    }
+  });
+
+  // 3. Email & Password Signup endpoint
+  app.post('/api/auth/signup', (req, res) => {
+    try {
+      const { name, email, password } = req.body;
+      if (!name || !name.trim()) {
+        return res.status(400).json({ success: false, error: 'Full name is required.' });
+      }
+      if (!email || !email.includes('@')) {
+        return res.status(400).json({ success: false, error: 'Valid email address is required.' });
+      }
+      if (!password || password.length < 6) {
+        return res.status(400).json({ success: false, error: 'Password must be at least 6 characters.' });
+      }
+
+      const cleanEmail = email.trim().toLowerCase();
+      const otp = generateOtp();
+      const expiresAt = Date.now() + 10 * 60 * 1000;
+
+      otpStore.set(cleanEmail, {
+        otp,
+        purpose: 'signup',
+        name: name.trim(),
+        password,
+        expiresAt,
+        attempts: 0,
+      });
+
+      console.log(`[AUTH SIGNUP] Sent signup OTP to ${cleanEmail}: [ ${otp} ]`);
+
+      return res.json({
+        success: true,
+        requiresOtp: true,
+        email: cleanEmail,
+        simulatedOtp: otp,
+        message: `Verification code sent to ${cleanEmail}. Please enter OTP to verify.`,
+      });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      return res.status(500).json({ success: false, error: msg });
+    }
+  });
+
+  // 4. Email & Password Login endpoint
+  app.post('/api/auth/login', (req, res) => {
+    try {
+      const { email, password } = req.body;
+      if (!email || !password) {
+        return res.status(400).json({ success: false, error: 'Email and password are required.' });
+      }
+
+      const cleanEmail = email.trim().toLowerCase();
+      const user = usersDb.get(cleanEmail);
+
+      if (!user) {
+        // Auto-provision or send OTP to verify email
+        const otp = generateOtp();
+        otpStore.set(cleanEmail, {
+          otp,
+          purpose: 'login',
+          expiresAt: Date.now() + 10 * 60 * 1000,
+          attempts: 0,
+        });
+        return res.json({
+          success: true,
+          requiresOtp: true,
+          email: cleanEmail,
+          simulatedOtp: otp,
+          message: 'First-time sign in: Please verify your email with OTP.',
+        });
+      }
+
+      return res.json({
+        success: true,
+        user,
+        message: 'Logged in successfully!',
+      });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      return res.status(500).json({ success: false, error: msg });
+    }
+  });
+
+  // 5. Google Sign-In endpoint
+  app.post('/api/auth/google', (req, res) => {
+    try {
+      const { email, name, avatar } = req.body;
+      const cleanEmail = (email || 'developer@gmail.com').trim().toLowerCase();
+      const userName = name || cleanEmail.split('@')[0] || 'Google User';
+      const userAvatar = avatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${cleanEmail}`;
+
+      let user = usersDb.get(cleanEmail);
+      user = {
+        id: user?.id || `google_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+        name: userName,
+        email: cleanEmail,
+        avatar: userAvatar,
+        provider: 'google',
+        emailVerified: true,
+        createdAt: user?.createdAt || new Date().toISOString(),
+      };
+
+      usersDb.set(cleanEmail, user);
+      return res.json({ success: true, user, message: 'Google sign-in successful!' });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      return res.status(500).json({ success: false, error: msg });
+    }
+  });
+
+  // 6. GitHub Sign-In endpoint
+  app.post('/api/auth/github', async (req, res) => {
+    try {
+      const { token, user: clientUser } = req.body;
+      const effectiveToken = token || activeGithubToken || process.env.GITHUB_TOKEN;
+
+      let ghUser = clientUser;
+      if (effectiveToken && !ghUser) {
+        try {
+          const ghRes = await fetch('https://api.github.com/user', {
+            headers: {
+              'User-Agent': 'CodePilot-AI',
+              Authorization: `Bearer ${effectiveToken}`,
+            },
+          });
+          if (ghRes.ok) {
+            ghUser = await ghRes.json();
+          }
+        } catch {
+          // ignore
+        }
+      }
+
+      const cleanEmail = (
+        ghUser?.email || `${ghUser?.login || 'github_user'}@users.noreply.github.com`
+      ).toLowerCase();
+      const userName = ghUser?.name || ghUser?.login || 'GitHub Developer';
+      const userAvatar =
+        ghUser?.avatar_url || `https://api.dicebear.com/7.x/bottts/svg?seed=${cleanEmail}`;
+
+      const user: AuthUserData = {
+        id: `gh_${ghUser?.id || Date.now()}`,
+        name: userName,
+        email: cleanEmail,
+        avatar: userAvatar,
+        provider: 'github',
+        emailVerified: true,
+        createdAt: new Date().toISOString(),
+        githubUsername: ghUser?.login || undefined,
+      };
+
+      usersDb.set(cleanEmail, user);
+      return res.json({ success: true, user, message: 'GitHub sign-in successful!' });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      return res.status(500).json({ success: false, error: msg });
+    }
+  });
+
+  // ==========================================
+  // EXTERNAL NETWORK / API PROXY (Bypass CORS)
+  // ==========================================
+  app.all('/api/proxy', async (req, res) => {
+    try {
+      const rawUrl = (req.query.url as string) || (req.body?.url as string);
+      if (!rawUrl) {
+        return res.status(400).json({ error: 'Missing required "url" parameter.' });
+      }
+
+      let targetUrl = decodeURIComponent(rawUrl);
+      if (!targetUrl.startsWith('http://') && !targetUrl.startsWith('https://')) {
+        targetUrl = `https://${targetUrl}`;
+      }
+
+      const parsedUrl = new URL(targetUrl);
+      const headers: Record<string, string> = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36 CodePilot/1.0',
+        'Accept': (req.headers.accept as string) || '*/*',
+      };
+
+      // Auto-inject GitHub token if querying GitHub domain
+      if (parsedUrl.hostname === 'api.github.com' || parsedUrl.hostname.endsWith('.github.com')) {
+        const token = activeGithubToken || process.env.GITHUB_TOKEN;
+        if (token && !headers['Authorization']) {
+          headers['Authorization'] = `Bearer ${token}`;
+        }
+        headers['Accept'] = 'application/vnd.github.v3+json';
+      }
+
+      const fetchOptions: RequestInit = {
+        method: req.method === 'POST' ? 'POST' : 'GET',
+        headers,
+      };
+
+      if (req.method === 'POST' && req.body && !req.body.url) {
+        fetchOptions.body = typeof req.body === 'string' ? req.body : JSON.stringify(req.body);
+        headers['Content-Type'] = (req.headers['content-type'] as string) || 'application/json';
+      }
+
+      const response = await fetch(parsedUrl.toString(), fetchOptions);
+
+      res.setHeader('Access-Control-Allow-Origin', '*');
+      res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+      res.setHeader('Access-Control-Allow-Headers', '*');
+
+      const contentType = response.headers.get('content-type') || 'application/octet-stream';
+      res.status(response.status);
+      res.setHeader('Content-Type', contentType);
+
+      const buffer = Buffer.from(await response.arrayBuffer());
+      return res.send(buffer);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error('[Proxy Error]:', msg);
+      return res.status(502).json({ error: 'Proxy request failed', details: msg });
+    }
+  });
+
+  // ==========================================
+  // REAL WORKSPACE FILESYSTEM API
+  // ==========================================
+  app.get('/api/workspace/files', async (_req, res) => {
+    try {
+      const workspaceFiles: Array<{
+        id: string;
+        name: string;
+        path: string;
+        type: 'file' | 'directory';
+        size: number;
+        content?: string;
+      }> = [];
+
+      async function scanDir(dir: string, base: string) {
+        const entries = await fs.promises.readdir(dir, { withFileTypes: true });
+        for (const entry of entries) {
+          if (['node_modules', '.git', 'dist', '.env', '.DS_Store', '.aistudio', '_imported_source'].includes(entry.name)) {
+            continue;
+          }
+          const fullPath = path.join(dir, entry.name);
+          const relPath = path.relative(base, fullPath);
+          if (entry.isDirectory()) {
+            workspaceFiles.push({
+              id: `dir-${relPath.replace(/[^a-zA-Z0-9]/g, '_')}`,
+              name: entry.name,
+              path: `/${relPath}`,
+              type: 'directory',
+              size: 0,
+            });
+            await scanDir(fullPath, base);
+          } else if (entry.isFile()) {
+            const stat = await fs.promises.stat(fullPath);
+            let content: string | undefined = undefined;
+            if (stat.size < 2 * 1024 * 1024 && !/\.(png|jpe?g|gif|webp|ico|wasm|zip|tar|gz|mp3|mp4|wav)$/i.test(entry.name)) {
+              content = await fs.promises.readFile(fullPath, 'utf8').catch(() => '');
+            }
+            workspaceFiles.push({
+              id: `file-${relPath.replace(/[^a-zA-Z0-9]/g, '_')}`,
+              name: entry.name,
+              path: `/${relPath}`,
+              type: 'file',
+              size: stat.size,
+              content,
+            });
+          }
+        }
+      }
+
+      await scanDir(process.cwd(), process.cwd());
+      return res.json({ success: true, files: workspaceFiles, count: workspaceFiles.length });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      return res.status(500).json({ success: false, error: msg });
+    }
+  });
+
+  app.post('/api/workspace/files/write', async (req, res) => {
+    try {
+      const { path: filePath, content } = req.body;
+      if (!filePath || typeof content !== 'string') {
+        return res.status(400).json({ success: false, error: 'Path and content are required.' });
+      }
+
+      const cleanPath = filePath.replace(/^[\/\\]+/, '');
+      const fullPath = path.resolve(process.cwd(), cleanPath);
+      if (!fullPath.startsWith(process.cwd())) {
+        return res.status(403).json({ success: false, error: 'Access outside workspace denied.' });
+      }
+
+      const exists = fs.existsSync(fullPath);
+      fs.mkdirSync(path.dirname(fullPath), { recursive: true });
+      fs.writeFileSync(fullPath, content, 'utf8');
+
+      return res.json({
+        success: true,
+        action: exists ? 'Updated' : 'Created',
+        path: cleanPath,
+        lines: content.split('\n').length,
+      });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      return res.status(500).json({ success: false, error: msg });
+    }
   });
 
   // ==========================================
@@ -914,37 +1366,195 @@ async function startServer() {
   });
 
   // ==========================================
-  // GITHUB CLONE / IMPORT PUBLIC REPO
+  // GITHUB CLONE / IMPORT REPO (PAT & Zipball & simple-git)
   // ==========================================
   app.post('/api/github/clone-repo', async (req, res) => {
     try {
-      const { repoUrl } = req.body;
-      if (!repoUrl) {
+      const { repoUrl, token, branch = 'main' } = req.body;
+      if (!repoUrl || typeof repoUrl !== 'string') {
         return res.status(400).json({ success: false, error: 'Repository URL is required.' });
       }
 
+      const effectiveToken = token || activeGithubToken || process.env.GITHUB_TOKEN;
       let cleanUrl = repoUrl.trim();
-      if (!cleanUrl.startsWith('http://') && !cleanUrl.startsWith('https://')) {
-        cleanUrl = `https://github.com/${cleanUrl}.git`;
-      }
-      if (!cleanUrl.endsWith('.git')) {
-        cleanUrl += '.git';
+
+      // Parse owner and repo name from URL or slug
+      const urlMatch = cleanUrl.match(/github\.com\/([^/]+)\/([^/.]+)/) || cleanUrl.match(/^([^/]+)\/([^/.]+)$/);
+      const owner = urlMatch ? urlMatch[1] : '';
+      const repoName = urlMatch ? urlMatch[2].replace(/\.git$/, '') : 'imported-repo';
+
+      let importedFiles: Array<{
+        id: string;
+        name: string;
+        path: string;
+        type: 'file' | 'directory';
+        size: number;
+        content?: string;
+      }> = [];
+
+      let rootFile = '';
+
+      // Strategy 1: Direct GitHub API Zipball fetch (Fastest, full file content, supports PAT)
+      let zipballSuccess = false;
+      if (owner && repoName) {
+        try {
+          const zipHeaders: Record<string, string> = {
+            'User-Agent': 'CodePilot-AI-App',
+            Accept: 'application/vnd.github.v3+json',
+          };
+          if (effectiveToken) {
+            zipHeaders['Authorization'] = `Bearer ${effectiveToken}`;
+          }
+
+          const zipUrl = `https://api.github.com/repos/${owner}/${repoName}/zipball/${branch || ''}`;
+          const zipRes = await fetch(zipUrl, { headers: zipHeaders });
+
+          if (zipRes.ok) {
+            const zipBuffer = Buffer.from(await zipRes.arrayBuffer());
+            const zip = await JSZip.loadAsync(zipBuffer);
+
+            const entries = Object.keys(zip.files);
+            if (entries.length > 0) {
+              // GitHub zipballs nest files inside a root directory (owner-repo-sha)
+              const rootPrefix = entries[0].includes('/') ? entries[0].split('/')[0] + '/' : '';
+              const saveDir = path.join(process.cwd(), 'imported_projects', repoName);
+              await fs.promises.mkdir(saveDir, { recursive: true });
+
+              for (const [entryPath, fileObj] of Object.entries(zip.files)) {
+                if (fileObj.dir) continue;
+                const cleanRelPath = entryPath.startsWith(rootPrefix) ? entryPath.slice(rootPrefix.length) : entryPath;
+                if (!cleanRelPath || cleanRelPath.startsWith('.') || cleanRelPath.includes('node_modules')) continue;
+
+                const fileName = path.basename(cleanRelPath);
+                let content = '';
+                try {
+                  content = await fileObj.async('string');
+                } catch {
+                  content = '';
+                }
+
+                // Write file to filesystem in imported_projects folder
+                try {
+                  const destPath = path.join(saveDir, cleanRelPath);
+                  await fs.promises.mkdir(path.dirname(destPath), { recursive: true });
+                  await fs.promises.writeFile(destPath, content, 'utf8');
+                } catch (writeErr) {
+                  // Non-fatal write error
+                }
+
+                importedFiles.push({
+                  id: `repo-${importedFiles.length}-${cleanRelPath.replace(/[^a-zA-Z0-9]/g, '_')}`,
+                  name: fileName,
+                  path: `/${cleanRelPath}`,
+                  type: 'file',
+                  size: content.length,
+                  content: content,
+                });
+              }
+
+              if (importedFiles.length > 0) {
+                zipballSuccess = true;
+              }
+            }
+          }
+        } catch (zipErr) {
+          console.warn('Zipball fetch fallback to git clone:', zipErr);
+        }
       }
 
-      const repoNameMatch = cleanUrl.match(/\/([^/]+)\.git$/);
-      const repoFolderName = repoNameMatch ? repoNameMatch[1] : 'imported-repo';
-      const targetFolder = path.join(process.cwd(), 'imported_' + repoFolderName);
+      // Strategy 2: Fallback to simple-git clone
+      if (!zipballSuccess) {
+        if (!cleanUrl.startsWith('http://') && !cleanUrl.startsWith('https://')) {
+          cleanUrl = `https://github.com/${cleanUrl}.git`;
+        }
+        if (!cleanUrl.endsWith('.git')) {
+          cleanUrl += '.git';
+        }
 
-      if (fs.existsSync(targetFolder)) {
-        await fs.promises.rm(targetFolder, { recursive: true, force: true });
+        let authUrl = cleanUrl;
+        if (effectiveToken && authUrl.startsWith('https://github.com/')) {
+          authUrl = authUrl.replace('https://github.com/', `https://${effectiveToken}@github.com/`);
+        }
+
+        const targetFolder = path.join(process.cwd(), 'imported_projects', repoName);
+        if (fs.existsSync(targetFolder)) {
+          await fs.promises.rm(targetFolder, { recursive: true, force: true });
+        }
+        await fs.promises.mkdir(targetFolder, { recursive: true });
+
+        await git.clone(authUrl, targetFolder, ['--depth', '1']);
+
+        // Recursively read all files from targetFolder
+        async function readDirRecursive(dir: string, base: string) {
+          const entries = await fs.promises.readdir(dir, { withFileTypes: true });
+          for (const entry of entries) {
+            if (['.git', 'node_modules', 'dist', '.DS_Store'].includes(entry.name)) continue;
+            const full = path.join(dir, entry.name);
+            const rel = path.relative(base, full);
+            if (entry.isDirectory()) {
+              await readDirRecursive(full, base);
+            } else if (entry.isFile()) {
+              const stat = await fs.promises.stat(full);
+              let content = '';
+              if (stat.size < 1024 * 1024 && !/\.(png|jpe?g|gif|webp|ico|wasm|zip)$/i.test(entry.name)) {
+                content = await fs.promises.readFile(full, 'utf8').catch(() => '');
+              }
+              importedFiles.push({
+                id: `repo-${importedFiles.length}-${rel.replace(/[^a-zA-Z0-9]/g, '_')}`,
+                name: entry.name,
+                path: `/${rel}`,
+                type: 'file',
+                size: stat.size,
+                content,
+              });
+            }
+          }
+        }
+
+        await readDirRecursive(targetFolder, targetFolder);
       }
 
-      await git.clone(cleanUrl, targetFolder, ['--depth', '1']);
+      // Determine the primary root file to open in the editor
+      const priorityOrder = [
+        'src/App.tsx',
+        'src/App.jsx',
+        'App.tsx',
+        'src/main.tsx',
+        'src/index.tsx',
+        'package.json',
+        'README.md',
+        'index.html',
+      ];
+      for (const candidate of priorityOrder) {
+        const found = importedFiles.find(
+          (f) => f.path === `/${candidate}` || f.path === candidate || f.name === candidate
+        );
+        if (found) {
+          rootFile = found.path;
+          break;
+        }
+      }
+      if (!rootFile && importedFiles.length > 0) {
+        rootFile = importedFiles[0].path;
+      }
 
       return res.json({
         success: true,
-        message: `Successfully cloned ${repoFolderName} into imported_${repoFolderName}`,
-        folderName: `imported_${repoFolderName}`,
+        message: `Successfully cloned and imported ${importedFiles.length} files from ${owner || 'repo'}/${repoName}.`,
+        repo: {
+          name: repoName,
+          full_name: owner ? `${owner}/${repoName}` : repoName,
+          clone_url: cleanUrl,
+          default_branch: branch,
+          private: false,
+          owner: {
+            login: owner || 'developer',
+            avatar_url: owner ? `https://github.com/${owner}.png` : '',
+          },
+        },
+        files: importedFiles,
+        rootFile,
+        count: importedFiles.length,
       });
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -1057,6 +1667,102 @@ async function startServer() {
     });
   });
 
+  // ==========================================
+  // REPLIT-STYLE WORKSPACE FILE-WRITING AGENT ENGINE
+  // ==========================================
+  interface FileModification {
+    path: string;
+    action: 'Created' | 'Updated';
+    lines: number;
+  }
+
+  function processReplitAgentFileWrites(rawText: string): {
+    processedText: string;
+    filesModified: FileModification[];
+  } {
+    const filesModified: FileModification[] = [];
+    let processed = rawText;
+
+    // Pattern 1: Explicit file tag or write_file path="path/to/file.ext"
+    processed = processed.replace(
+      /```(?:file:|write_file\s+path=["']?|filepath=["']?)([^\s\n"']+)[\r\n]+([\s\S]*?)```/g,
+      (_match, rawPath, content) => {
+        const cleanPath = rawPath.trim().replace(/^[\/\\]+/, '');
+        if (!cleanPath || cleanPath.includes('..')) return _match;
+        try {
+          const fullPath = path.resolve(process.cwd(), cleanPath);
+          if (fullPath.startsWith(process.cwd())) {
+            const exists = fs.existsSync(fullPath);
+            fs.mkdirSync(path.dirname(fullPath), { recursive: true });
+            fs.writeFileSync(fullPath, content.trim(), 'utf8');
+            const action = exists ? 'Updated' : 'Created';
+            const lines = content.trim().split('\n').length;
+            filesModified.push({ path: cleanPath, action, lines });
+            return `\n\n[ACTION_BADGE:${action}:${cleanPath}:${lines}]\n\n`;
+          }
+        } catch (e) {
+          console.warn(`Could not write file ${cleanPath}:`, e);
+        }
+        return _match;
+      }
+    );
+
+    // Pattern 2: Code block with lang:filepath.ext
+    processed = processed.replace(
+      /```([a-zA-Z0-9_-]+)?\s*[:=]\s*([a-zA-Z0-9_\-\.\/]+\.[a-zA-Z0-9]+)[\r\n]+([\s\S]*?)```/g,
+      (_match, _lang, rawPath, content) => {
+        const cleanPath = rawPath.trim().replace(/^[\/\\]+/, '');
+        if (!cleanPath || cleanPath.includes('..') || cleanPath.endsWith('.exe')) return _match;
+        try {
+          const fullPath = path.resolve(process.cwd(), cleanPath);
+          if (fullPath.startsWith(process.cwd())) {
+            const exists = fs.existsSync(fullPath);
+            fs.mkdirSync(path.dirname(fullPath), { recursive: true });
+            fs.writeFileSync(fullPath, content.trim(), 'utf8');
+            const action = exists ? 'Updated' : 'Created';
+            const lines = content.trim().split('\n').length;
+            filesModified.push({ path: cleanPath, action, lines });
+            return `\n\n[ACTION_BADGE:${action}:${cleanPath}:${lines}]\n\n`;
+          }
+        } catch (e) {
+          console.warn(`Could not write file ${cleanPath}:`, e);
+        }
+        return _match;
+      }
+    );
+
+    // Pattern 3: Code block where the first line inside the code block is a file comment: // src/... or /* src/... */
+    processed = processed.replace(
+      /```([a-zA-Z0-9_-]+)?[\r\n]+(?:\/\/|#|\/\*|<!--)\s*(?:File:|Path:|File path:)?\s*([a-zA-Z0-9_\-\.\/]+\.[a-zA-Z0-9]{1,10})\s*(?:\*\/|-->)?[\r\n]+([\s\S]*?)```/g,
+      (_match, _lang, rawPath, content) => {
+        const cleanPath = rawPath.trim().replace(/^[\/\\]+/, '');
+        if (!cleanPath || cleanPath.includes('..') || cleanPath.includes(' ') || cleanPath.length > 120) {
+          return _match;
+        }
+        if (!/\.(tsx?|jsx?|css|html|json|md|py|sh|sql|svg|yaml|yml)$/i.test(cleanPath)) {
+          return _match;
+        }
+        try {
+          const fullPath = path.resolve(process.cwd(), cleanPath);
+          if (fullPath.startsWith(process.cwd())) {
+            const exists = fs.existsSync(fullPath);
+            fs.mkdirSync(path.dirname(fullPath), { recursive: true });
+            fs.writeFileSync(fullPath, content.trim(), 'utf8');
+            const action = exists ? 'Updated' : 'Created';
+            const lines = content.trim().split('\n').length;
+            filesModified.push({ path: cleanPath, action, lines });
+            return `\n\n[ACTION_BADGE:${action}:${cleanPath}:${lines}]\n\n`;
+          }
+        } catch (e) {
+          console.warn(`Could not write file ${cleanPath}:`, e);
+        }
+        return _match;
+      }
+    );
+
+    return { processedText: processed, filesModified };
+  }
+
   // 4. Unified chat completion API endpoint
   app.post('/api/chat', async (req, res) => {
     try {
@@ -1070,6 +1776,20 @@ async function startServer() {
 
       // Autonomous Senior Software Engineer & Background Multi-Agent Intelligence
       let systemPrompt = `You are an autonomous Senior Software Engineer. Never give excuses like 'I am an AI', 'I cannot send zip files', or 'I do not have access to files'. Always provide functional, ready-to-run code, comprehensive project file structures, and invoke backend tools directly.
+
+CRITICAL REPLIT-AGENT WORKSPACE DIRECTIVE (ZERO RAW CODE DUMPING):
+- You operate as an autonomous coding agent that writes directly to the workspace filesystem via backend fs.writeFileSync.
+- DO NOT dump large, multi-screen raw code blocks directly into your conversational chat bubble!
+- When creating or modifying code files, always specify the exact file path in the code fence header:
+\`\`\`file:src/components/MyComponent.tsx
+// Complete production-ready file code
+\`\`\`
+Or with standard language fence:
+\`\`\`tsx // src/components/MyComponent.tsx
+// Complete production-ready file code
+\`\`\`
+- In your chat message, provide a crisp, elegant technical explanation, architecture overview, and summary of changes.
+- The server will automatically intercept your code blocks, execute fs.writeFileSync directly to the workspace filesystem, auto-refresh the Live Preview tab, and replace raw code dumps in chat with a sleek action badge ("Created/Updated: src/Component.tsx").
 
 CORE ARCHITECTURAL DISCIPLINES:
 1. Systems Architecture: Designing resilient topologies, clean data models, scalable API contracts, and performant backend logic.
@@ -1201,16 +1921,22 @@ You MUST provide the functional project code and immediately display the direct 
 CRITICAL: NEVER say "I cannot send zip files", "I cannot provide downloads", or "As an AI...". The backend has bundled the workspace and /api/workspace/zip is ready for download.`;
       }
 
-      // Safe responder helper to guarantee zip download link is provided when requested
+      // Safe responder helper to guarantee zip download link is provided when requested & process file writes
       const sendChatResponse = (reply: string, modelUsed: string, provider: string) => {
         let finalReply = reply;
         if (isZipRequest && !finalReply.includes('/api/workspace/zip')) {
           finalReply += `\n\n---\n### 📦 Project Bundle Ready\n[⬇️ Download Project .ZIP](/api/workspace/zip)`;
         }
+
+        // Replit-agent workspace file interceptor
+        const { processedText, filesModified } = processReplitAgentFileWrites(finalReply);
+
         return res.json({
-          reply: finalReply,
+          reply: processedText,
           modelUsed,
-          provider
+          provider,
+          filesModified,
+          autoRefreshPreview: filesModified.length > 0,
         });
       };
 

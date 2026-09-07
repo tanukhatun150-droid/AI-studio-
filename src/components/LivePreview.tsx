@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   RotateCw,
   ExternalLink,
@@ -18,12 +18,14 @@ interface LivePreviewProps {
   initialUrl?: string;
   onClose?: () => void;
   isSplitView?: boolean;
+  refreshKey?: number;
 }
 
 export function LivePreview({
   initialUrl = window.location.origin,
   onClose,
   isSplitView = true,
+  refreshKey,
 }: LivePreviewProps) {
   const [urlInput, setUrlInput] = useState(initialUrl);
   const [activeUrl, setActiveUrl] = useState(initialUrl);
@@ -38,6 +40,13 @@ export function LivePreview({
     setKey((prev) => prev + 1);
     setTimeout(() => setIsRefreshing(false), 600);
   };
+
+  // Auto-refresh when external refreshKey updates
+  useEffect(() => {
+    if (typeof refreshKey === 'number' && refreshKey > 0) {
+      handleRefresh();
+    }
+  }, [refreshKey]);
 
   const handleNavigate = (e: React.FormEvent) => {
     e.preventDefault();

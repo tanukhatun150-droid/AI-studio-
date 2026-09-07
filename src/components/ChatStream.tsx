@@ -24,6 +24,7 @@ import {
 import { ChatAttachment, Message, Model } from '../types';
 import { ReplitCodeBlock } from './ReplitCodeBlock';
 import { GeneratedImageCard } from './GeneratedImageCard';
+import { ActionBadge } from './ActionBadge';
 
 interface ChecklistItem {
   status: 'completed' | 'in_progress' | 'pending';
@@ -232,6 +233,8 @@ interface ChatStreamProps {
   starterChips: string[];
   onRegenerate?: () => void;
   onOpenTerminal?: (command: string) => void;
+  onOpenFile?: (filePath: string) => void;
+  onOpenPreview?: () => void;
 }
 
 export function ChatStream({
@@ -242,6 +245,8 @@ export function ChatStream({
   starterChips,
   onRegenerate,
   onOpenTerminal,
+  onOpenFile,
+  onOpenPreview,
 }: ChatStreamProps) {
   const bottomRef = useRef<HTMLDivElement>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
@@ -563,6 +568,39 @@ export function ChatStream({
             key={`img-${i}`}
             alt={directImgMatch[1] || 'Generated Photo'}
             url={directImgMatch[2]}
+          />
+        );
+        i++;
+        continue;
+      }
+
+      // 3.55. Action Badge: Created/Updated File to replace raw code dumps
+      const actionBadgeMatch = trimmed.match(/^\[ACTION_BADGE:(Created|Updated):([^:]+):?([0-9]*)\]$/i);
+      if (actionBadgeMatch) {
+        elements.push(
+          <ActionBadge
+            key={`action-badge-${i}`}
+            action={actionBadgeMatch[1]}
+            filePath={actionBadgeMatch[2]}
+            lines={actionBadgeMatch[3]}
+            onOpenFile={onOpenFile}
+            onOpenPreview={onOpenPreview}
+          />
+        );
+        i++;
+        continue;
+      }
+
+      const textBadgeMatch = trimmed.match(/^(?:Created|Updated):\s*([a-zA-Z0-9_\-\.\/]+\.[a-zA-Z0-9]{1,10})$/i);
+      if (textBadgeMatch && !trimmed.includes('```')) {
+        const actionType = trimmed.toLowerCase().startsWith('created') ? 'Created' : 'Updated';
+        elements.push(
+          <ActionBadge
+            key={`text-badge-${i}`}
+            action={actionType}
+            filePath={textBadgeMatch[1]}
+            onOpenFile={onOpenFile}
+            onOpenPreview={onOpenPreview}
           />
         );
         i++;

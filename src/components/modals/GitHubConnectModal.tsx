@@ -64,7 +64,7 @@ interface GitHubConnectModalProps {
   isOpen: boolean;
   onClose: () => void;
   onRepoSelected?: (repoUrl: string, branch: string) => void;
-  onRepoImported?: (repo: GitHubRepo, files: WorkspaceFile[]) => void;
+  onRepoImported?: (repo: GitHubRepo, files: WorkspaceFile[], rootFile?: string) => void;
   onOpenCode?: () => void;
   onOpenTerminal?: () => void;
 }
@@ -313,76 +313,31 @@ export function GitHubConnectModal({
     setImportSuccessData(null);
 
     try {
-      // Step 1: Connect to repository & set origin remote
-      await new Promise((r) => setTimeout(r, 400));
-      setImportProgressStep(2); // 2. Configuring origin & branches
+      setImportProgressStep(2); // 2. Connecting & verifying repository
 
-      const importRes = await fetch('/api/git/import', {
+      // Call backend direct clone/zipball with PAT token support
+      const cloneRes = await fetch('/api/github/clone-repo', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          repoUrl: repo.clone_url,
+          repoUrl: repo.clone_url || repo.html_url,
           branch: repo.default_branch || 'main',
+          token: tokenInput.trim() || undefined,
         }),
       });
 
-      const importData = await importRes.json();
-      if (!importData.success) {
-        throw new Error(importData.error || 'Git import failed');
+      setImportProgressStep(3); // 3. Extracting and syncing files
+      const cloneData = await cloneRes.json();
+
+      if (!cloneData.success) {
+        throw new Error(cloneData.error || 'Failed to clone repository');
       }
 
-      setImportProgressStep(3); // 3. Fetching repository file tree
-      const owner = repo.owner?.login || repo.full_name.split('/')[0];
-      const repoName = repo.name || repo.full_name.split('/')[1];
-
-      let importedFiles: WorkspaceFile[] = [];
-      try {
-        const treeRes = await fetch(
-          `/api/github/repo-tree?owner=${encodeURIComponent(owner)}&repo=${encodeURIComponent(repoName)}&branch=${encodeURIComponent(repo.default_branch || 'main')}`
-        );
-        const treeData = await treeRes.json();
-        if (treeData.success && Array.isArray(treeData.files) && treeData.files.length > 0) {
-          importedFiles = treeData.files.map((f: any, idx: number) => ({
-            id: `repo-file-${idx}-${f.name}`,
-            name: f.name,
-            path: f.path,
-            type: f.type === 'directory' ? 'directory' : 'file',
-            size: f.size ? parseInt(f.size) * 1024 : 1024,
-            content: `// ${repo.full_name}\n// File: ${f.path}\n// Branch: ${repo.default_branch}\n`,
-          }));
-        }
-      } catch (treeErr) {
-        console.warn('Tree fetch fallback:', treeErr);
-      }
-
-      // If no files returned from API, provide standard structure
-      if (importedFiles.length === 0) {
-        importedFiles = [
-          {
-            id: `repo-file-readme`,
-            name: 'README.md',
-            path: '/README.md',
-            type: 'file',
-            content: `# ${repo.full_name}\n\n${repo.description || 'Imported into CodePilot AI'}\n\nDefault branch: \`${repo.default_branch}\``,
-          },
-          {
-            id: `repo-file-pkg`,
-            name: 'package.json',
-            path: '/package.json',
-            type: 'file',
-            content: `{\n  "name": "${repo.name}",\n  "version": "1.0.0"\n}`,
-          },
-          {
-            id: `repo-file-src`,
-            name: 'src',
-            path: '/src',
-            type: 'directory',
-          },
-        ];
-      }
+      const importedFiles: WorkspaceFile[] = cloneData.files || [];
+      const rootFile = cloneData.rootFile || '';
 
       setImportProgressStep(4); // 4. Finalizing workspace
-      await new Promise((r) => setTimeout(r, 500));
+      await new Promise((r) => setTimeout(r, 400));
 
       setImportSuccessData({
         repo,
@@ -391,7 +346,7 @@ export function GitHubConnectModal({
 
       // Call parent callbacks
       if (onRepoImported) {
-        onRepoImported(repo, importedFiles);
+        onRepoImported(repo, importedFiles, rootFile);
       }
       if (onRepoSelected) {
         onRepoSelected(repo.clone_url, repo.default_branch || 'main');
@@ -794,6 +749,34 @@ export function GitHubConnectModal({
                       </>
                     )}
                   </button>
+
+                  <div className="relative py-1">
+                    <div className="absolute inset-0 flex items-center">
+                      <div className="w-full border-t border-[#2e313b]" />
+                    </div>
+                    <div className="relative flex justify-center text-[10px] uppercase font-semibold">
+                      <span className="bg-[#1d1f25] px-2 text-[#8e918f]">Or Clone Any URL Directly</span>
+                    </div>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <input
+                      type="url"
+                      value={customRepoUrl}
+                      onChange={(e) => setCustomRepoUrl(e.target.value)}
+                      placeholder="Paste repo URL (e.g. https://github.com/owner/repo.git)"
+                      className="w-full px-3 py-2 rounded-xl bg-[#121317] border border-[#363842] text-xs text-white placeholder-[#6e7078] focus:outline-none focus:border-[#0079ff]"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleImportCustomUrl}
+                      disabled={!customRepoUrl.trim()}
+                      className="w-full h-9 rounded-xl bg-[#282a33] hover:bg-[#323540] text-[#a8c7fa] hover:text-white font-semibold text-xs transition-all border border-[#3f424e] disabled:opacity-40 flex items-center justify-center gap-1.5 cursor-pointer"
+                    >
+                      <Download className="w-3.5 h-3.5" />
+                      <span>Clone This Repository (With or Without PAT)</span>
+                    </button>
+                  </div>
                 </form>
               )}
 

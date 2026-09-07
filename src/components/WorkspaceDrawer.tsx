@@ -28,8 +28,11 @@ import {
   Loader2,
   Bot,
   Radio,
+  LogIn,
+  LogOut,
+  User as UserIcon,
 } from 'lucide-react';
-import { AgentPersona, WorkspaceFile, WorkspaceTool, ChatSession } from '../types';
+import { AgentPersona, WorkspaceFile, WorkspaceTool, ChatSession, UserProfile } from '../types';
 
 interface WorkspaceDrawerProps {
   isOpen: boolean;
@@ -59,6 +62,9 @@ interface WorkspaceDrawerProps {
   currentSessionId?: string;
   onSelectSession?: (sessionId: string) => void;
   onDeleteSession?: (sessionId: string) => void;
+  currentUser?: UserProfile | null;
+  onOpenAuth?: () => void;
+  onSignOut?: () => void;
 }
 
 export function WorkspaceDrawer({
@@ -89,6 +95,9 @@ export function WorkspaceDrawer({
   currentSessionId,
   onSelectSession,
   onDeleteSession,
+  currentUser,
+  onOpenAuth,
+  onSignOut,
 }: WorkspaceDrawerProps) {
   const [showGitImport, setShowGitImport] = useState(false);
   const [gitRepoUrl, setGitRepoUrl] = useState('');
@@ -188,6 +197,75 @@ export function WorkspaceDrawer({
 
         {/* Scrollable Body */}
         <div className="flex-1 overflow-y-auto px-4 py-3.5 space-y-5 custom-scrollbar">
+          {/* User Account / Sign In Status Card */}
+          {currentUser ? (
+            <div
+              id="drawer-user-card"
+              className="p-3 rounded-2xl bg-[#282a2c]/80 border border-[#383b42] flex items-center justify-between gap-3 shadow-xs"
+            >
+              <div className="flex items-center gap-2.5 min-w-0">
+                <img
+                  src={
+                    currentUser.avatar ||
+                    `https://api.dicebear.com/7.x/bottts/svg?seed=${currentUser.email}`
+                  }
+                  alt={currentUser.name}
+                  className="w-10 h-10 rounded-full bg-zinc-800 object-cover border border-sky-500/30 shrink-0"
+                />
+                <div className="min-w-0">
+                  <div className="text-xs font-bold text-white truncate flex items-center gap-1.5">
+                    <span className="truncate">{currentUser.name}</span>
+                    <span className="text-[10px] bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 px-1 py-0.2 rounded font-normal shrink-0 flex items-center gap-0.5">
+                      <ShieldCheck className="w-2.5 h-2.5" />
+                      OTP Verified
+                    </span>
+                  </div>
+                  <div className="text-[11px] text-[#8e918f] truncate">{currentUser.email}</div>
+                </div>
+              </div>
+
+              <button
+                id="btn-drawer-sign-out"
+                onClick={() => {
+                  if (onSignOut) onSignOut();
+                }}
+                title="Sign Out"
+                className="p-1.5 rounded-lg text-zinc-400 hover:text-red-400 hover:bg-red-500/10 transition-colors cursor-pointer shrink-0"
+              >
+                <LogOut className="w-4 h-4" />
+              </button>
+            </div>
+          ) : (
+            <div
+              id="drawer-guest-login-card"
+              className="p-3 rounded-2xl bg-gradient-to-r from-sky-950/40 to-indigo-950/40 border border-sky-500/30 shadow-xs"
+            >
+              <div className="flex items-center justify-between mb-2">
+                <div className="text-xs font-bold text-white flex items-center gap-1.5">
+                  <UserIcon className="w-3.5 h-3.5 text-sky-400" />
+                  <span>Account & Cloud Sync</span>
+                </div>
+                <span className="text-[10px] text-sky-300 font-mono bg-sky-500/20 px-1.5 py-0.5 rounded">
+                  OTP Ready
+                </span>
+              </div>
+              <p className="text-[11px] text-zinc-400 mb-2.5 leading-relaxed">
+                Sign in with Google, GitHub, or Email OTP to sync workspaces across devices.
+              </p>
+              <button
+                id="btn-drawer-login"
+                onClick={() => {
+                  onClose();
+                  if (onOpenAuth) onOpenAuth();
+                }}
+                className="w-full h-8 flex items-center justify-center gap-2 rounded-xl bg-sky-500 hover:bg-sky-400 text-white font-semibold text-xs transition-all shadow-xs cursor-pointer active:scale-95"
+              >
+                <LogIn className="w-3.5 h-3.5" />
+                <span>Sign In / Create Account</span>
+              </button>
+            </div>
+          )}
+
           {/* New Chat Button (minHeight 48, borderRadius 24, paddingHorizontal 17) */}
           <button
             id="btn-drawer-new-chat"

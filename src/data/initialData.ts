@@ -368,6 +368,7 @@ export const initialMemoryItems: MemoryItem[] = [
 ];
 
 export const starterPromptChips = [
+  '🔐 Sign in with Firebase (Google, GitHub, Email)',
   '✨ Generate a photorealistic AI image of futuristic coder',
   '🌐 World me kya ho raha hai? Latest news check karo',
   '⚡ Write a Python script and run it in Replit terminal',

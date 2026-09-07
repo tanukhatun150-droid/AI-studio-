@@ -18,6 +18,7 @@ import {
   WorkspaceTask,
   WorkspaceTool,
   ChatSession,
+  UserProfile,
 } from './types';
 import { Header } from './components/Header';
 import { WorkspaceDrawer } from './components/WorkspaceDrawer';
@@ -33,8 +34,16 @@ import { ToolModal } from './components/modals/ToolModal';
 import { FileModal } from './components/modals/FileModal';
 import { SettingsModal } from './components/modals/SettingsModal';
 import { RecentChatsModal } from './components/modals/RecentChatsModal';
+import { AuthModal, AuthMode } from './components/modals/AuthModal';
 import { Maximize2, Bot } from 'lucide-react';
 import { JarvisFloatingWidget } from './components/JarvisFloatingWidget';
+import {
+  auth,
+  mapFirebaseUserToProfile,
+  firebaseSignOut,
+  onAuthStateChanged,
+  firebaseConfig,
+} from './lib/firebase';
 
 export default function App() {
   // Models & Agents
@@ -80,6 +89,20 @@ export default function App() {
   // Split Workspace Live Preview & Interactive Terminal
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   const [isTerminalOpen, setIsTerminalOpen] = useState(false);
+  const [previewRefreshKey, setPreviewRefreshKey] = useState(0);
+
+  // Sync workspace files from filesystem API
+  const syncWorkspaceFiles = async () => {
+    try {
+      const res = await fetch('/api/workspace/files');
+      const data = await res.json();
+      if (data.success && Array.isArray(data.files) && data.files.length > 0) {
+        setFiles(data.files);
+      }
+    } catch {
+      // ignore
+    }
+  };
 
   // Real GitHub Connect modal & session user
   const [isGitHubOpen, setIsGitHubOpen] = useState(false);
@@ -116,6 +139,71 @@ export default function App() {
     return () => window.removeEventListener('message', handleMessage);
   }, []);
 
+  // Authentication State (Google, GitHub, Email OTP, Firebase)
+  const [currentUser, setCurrentUser] = useState<UserProfile | null>(() => {
+    try {
+      const saved = localStorage.getItem('codepilot_auth_user');
+      return saved ? JSON.parse(saved) : null;
+    } catch {
+      return null;
+    }
+  });
+  const [isAuthOpen, setIsAuthOpen] = useState(false);
+  const [authInitialMode, setAuthInitialMode] = useState<AuthMode>('signin');
+
+  // Listen to Firebase Auth state updates
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (fbUser) => {
+      if (fbUser) {
+        const profile = mapFirebaseUserToProfile(fbUser);
+        setCurrentUser(profile);
+        try {
+          localStorage.setItem('codepilot_auth_user', JSON.stringify(profile));
+        } catch {
+          // ignore
+        }
+      }
+    });
+    return () => unsubscribe();
+  }, []);
+
+  const handleAuthSuccess = (user: UserProfile) => {
+    setCurrentUser(user);
+    try {
+      localStorage.setItem('codepilot_auth_user', JSON.stringify(user));
+    } catch {
+      // ignore
+    }
+    const welcomeMsg: Message = {
+      id: `msg-${Date.now()}`,
+      role: 'assistant',
+      content: `### 🔐 Welcome, **${user.name}**!\n\n- **Email**: \`${user.email}\`\n- **Status**: ✅ Authenticated\n- **Provider**: \`${user.provider.toUpperCase()}\`\n- **Firebase Project**: \`${firebaseConfig.projectId}\`\n\nYour session is authenticated with Firebase (\`${firebaseConfig.authDomain}\`). You can manage your projects, sync workspaces, and run terminal tools securely.`,
+      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+    };
+    setMessages((prev) => [...prev, welcomeMsg]);
+  };
+
+  const handleSignOut = () => {
+    try {
+      firebaseSignOut(auth).catch(() => {});
+    } catch {
+      // ignore
+    }
+    setCurrentUser(null);
+    try {
+      localStorage.removeItem('codepilot_auth_user');
+    } catch {
+      // ignore
+    }
+    const logoutMsg: Message = {
+      id: `msg-${Date.now()}`,
+      role: 'assistant',
+      content: `You have signed out. You can continue using CodePilot as a guest or sign in anytime with Google, GitHub, or Email OTP.`,
+      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+    };
+    setMessages((prev) => [...prev, logoutMsg]);
+  };
+
   // Active workspace mode: preview, code, or terminal
   const activeWorkspaceMode: 'preview' | 'code' | 'terminal' = isPreviewOpen
     ? 'preview'
@@ -123,14 +211,23 @@ export default function App() {
     ? 'terminal'
     : 'code';
 
-  const handleRepoImported = (repo: any, importedFiles: WorkspaceFile[]) => {
+  const handleRepoImported = (repo: any, importedFiles: WorkspaceFile[], rootFile?: string) => {
     if (importedFiles && importedFiles.length > 0) {
       setFiles(importedFiles);
+      if (rootFile) {
+        const found = importedFiles.find(
+          (f) => f.path === rootFile || f.name === rootFile || f.path.endsWith(rootFile)
+        );
+        if (found) {
+          setSelectedFile(found);
+        }
+      }
     }
+    handleSelectWorkspaceMode('code');
     const notificationMsg: Message = {
       id: `msg-${Date.now()}`,
       role: 'assistant',
-      content: `### 🚀 Repository Imported: **${repo.full_name || repo.name}**\n\n- **Default Branch**: \`${repo.default_branch || 'main'}\`\n- **Visibility**: ${repo.private ? '🔒 Private' : '🌐 Public'}\n- **Files Synced**: ${importedFiles.length} files imported into workspace\n\nAll repository files are now available in your workspace file explorer. You can inspect files, run terminal commands, or ask me to modify code directly!`,
+      content: `### 🚀 Repository Cloned & Synced: **${repo.full_name || repo.name}**\n\n- **Default Branch**: \`${repo.default_branch || 'main'}\`\n- **Visibility**: ${repo.private ? '🔒 Private' : '🌐 Public'}\n- **Files Synced**: ${importedFiles.length} files extracted into workspace\n${rootFile ? `- **Root File**: \`${rootFile}\` (Opened in Code Editor)\n` : ''}\nAll repository files have been extracted directly into your workspace file system. You can view, edit, and preview them now!`,
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
     };
     setMessages((prev) => [...prev, notificationMsg]);
@@ -421,6 +518,12 @@ export default function App() {
         modelId: data.modelUsed || currentModel.name,
       };
 
+      // Auto-refresh Live Preview and sync workspace files when files are modified
+      if (data.autoRefreshPreview || (data.filesModified && data.filesModified.length > 0)) {
+        setPreviewRefreshKey((prev) => prev + 1);
+        syncWorkspaceFiles();
+      }
+
       const finalMessages = [...updatedMessages, assistantMsg];
       setMessages(finalMessages);
       saveCurrentSession(finalMessages);
@@ -498,6 +601,12 @@ export default function App() {
           }}
           isJarvisMode={isJarvisMode}
           onToggleJarvisMode={() => setIsJarvisMode((prev) => !prev)}
+          currentUser={currentUser}
+          onOpenAuth={() => {
+            setAuthInitialMode('signin');
+            setIsAuthOpen(true);
+          }}
+          onSignOut={handleSignOut}
         />
 
         {/* Floating Assistant Mode (Jarvis Mode) vs Full IDE Workspace */}
@@ -557,10 +666,37 @@ export default function App() {
                 messages={messages}
                 isLoading={isLoading}
                 currentModel={currentModel}
-                onSelectPromptChip={(prompt) => handleSendMessage(prompt)}
+                onSelectPromptChip={(prompt) => {
+                  if (prompt.includes('Sign in') || prompt.includes('Firebase')) {
+                    setAuthInitialMode('signin');
+                    setIsAuthOpen(true);
+                  } else {
+                    handleSendMessage(prompt);
+                  }
+                }}
                 starterChips={starterPromptChips}
                 onRegenerate={handleRegenerate}
                 onOpenTerminal={() => setIsTerminalOpen(true)}
+                onOpenFile={(filePath) => {
+                  const matched = files.find(
+                    (f) => f.path === filePath || f.path.endsWith(filePath) || filePath.endsWith(f.name)
+                  );
+                  if (matched) {
+                    setSelectedFile(matched);
+                  } else {
+                    setSelectedFile({
+                      id: `file-${Date.now()}`,
+                      name: filePath.split('/').pop() || filePath,
+                      path: filePath.startsWith('/') ? filePath : `/${filePath}`,
+                      type: 'file',
+                      content: `// File: ${filePath}\n`,
+                    });
+                  }
+                  handleSelectWorkspaceMode('code');
+                }}
+                onOpenPreview={() => {
+                  handleSelectWorkspaceMode('preview');
+                }}
               />
 
               {/* Embedded Live Interactive Bash Terminal (Collapsible bottom pane) */}
@@ -583,7 +719,11 @@ export default function App() {
             {/* Live Web Preview Window (Split-Pane on Desktop) */}
             {isPreviewOpen && (
               <div className="w-full lg:w-[48%] xl:w-[50%] h-full shrink-0 border-l border-[#2e3036] z-10 flex flex-col animate-in slide-in-from-right-2">
-                <LivePreview onClose={() => setIsPreviewOpen(false)} isSplitView={true} />
+                <LivePreview
+                  onClose={() => setIsPreviewOpen(false)}
+                  isSplitView={true}
+                  refreshKey={previewRefreshKey}
+                />
               </div>
             )}
           </div>
@@ -637,6 +777,12 @@ export default function App() {
         currentSessionId={currentSessionId}
         onSelectSession={handleSelectSession}
         onDeleteSession={handleDeleteSession}
+        currentUser={currentUser}
+        onOpenAuth={() => {
+          setAuthInitialMode('signin');
+          setIsAuthOpen(true);
+        }}
+        onSignOut={handleSignOut}
       />
 
       {/* GitHub Connect & Repository Manager Modal */}
@@ -710,6 +856,15 @@ export default function App() {
         onClose={() => setIsSettingsOpen(false)}
         isMobileFrame={isMobileFrame}
         onToggleFrame={() => setIsMobileFrame((prev) => !prev)}
+      />
+
+      {/* Authentication & Email OTP Login/Signup Modal */}
+      <AuthModal
+        isOpen={isAuthOpen}
+        onClose={() => setIsAuthOpen(false)}
+        onSuccess={handleAuthSuccess}
+        initialMode={authInitialMode}
+        initialEmail={currentUser?.email || 'aryuxx780@gmail.com'}
       />
     </div>
   );

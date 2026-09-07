@@ -97,3 +97,16 @@ export interface ChatSession {
   agentId?: string;
   modelId?: string;
 }
+
+export type AuthProvider = 'google' | 'github' | 'email' | 'firebase';
+
+export interface UserProfile {
+  id: string;
+  name: string;
+  email: string;
+  avatar?: string;
+  provider: AuthProvider;
+  emailVerified: boolean;
+  createdAt: string;
+  githubUsername?: string;
+}
