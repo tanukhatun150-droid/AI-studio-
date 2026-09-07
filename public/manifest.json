@@ -1,0 +1,23 @@
+{
+  "short_name": "CodePilot",
+  "name": "Code Pilot AI - Autonomous Developer Workspace",
+  "description": "Autonomous Senior Software Engineer workspace with Jarvis Floating Assistant, Bash terminal, Replit-style code runner, and real-time AI tools.",
+  "icons": [
+    {
+      "src": "/public/ai-agent-home-icon.png",
+      "type": "image/png",
+      "sizes": "192x192"
+    },
+    {
+      "src": "/public/ai-agent-home-icon.png",
+      "type": "image/png",
+      "sizes": "512x512"
+    }
+  ],
+  "start_url": "/",
+  "background_color": "#0e1013",
+  "theme_color": "#0e1013",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "scope": "/"
+}

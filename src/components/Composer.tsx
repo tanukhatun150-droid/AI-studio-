@@ -9,6 +9,7 @@ import {
   Video,
   FileCode,
   Loader2,
+  Sparkles,
 } from 'lucide-react';
 import { ChatAttachment } from '../types';
 
@@ -30,6 +31,7 @@ export function Composer({
   const [pendingAttachment, setPendingAttachment] = useState<ChatAttachment | null>(null);
   const [isReadingFile, setIsReadingFile] = useState(false);
   const [isListening, setIsListening] = useState(false);
+  const [voiceLang, setVoiceLang] = useState<'hi' | 'en'>(selectedLanguage === 'hindi' ? 'hi' : 'en');
   const [showAttachMenu, setShowAttachMenu] = useState(false);
   const [isDragOver, setIsDragOver] = useState(false);
 
@@ -38,6 +40,7 @@ export function Composer({
   const photoInputRef = useRef<HTMLInputElement>(null);
   const videoInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const recognitionRef = useRef<any>(null);
 
   // Process any incoming file (photo, video, code, document)
   const processFile = (file: File) => {
@@ -170,9 +173,35 @@ export function Composer({
     e.target.style.height = `${Math.min(e.target.scrollHeight, 140)}px`;
   };
 
-  const toggleVoiceInput = () => {
+  const toggleVoiceInput = (targetLang?: 'hi' | 'en') => {
+    const langToUse = targetLang || voiceLang;
+    if (targetLang && targetLang !== voiceLang) {
+      setVoiceLang(targetLang);
+    }
+
+    // If currently listening and no new language requested, clicking mic stops recording
+    if (isListening && !targetLang) {
+      try {
+        recognitionRef.current?.stop();
+      } catch {
+        // ignore
+      }
+      setIsListening(false);
+      return;
+    }
+
+    if (isListening && targetLang) {
+      try {
+        recognitionRef.current?.stop();
+      } catch {
+        // ignore
+      }
+    }
+
     if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
-      const demoSpeech = 'Hello, can you help me build this application?';
+      const demoSpeech = langToUse === 'hi'
+        ? 'नमस्ते, मुझे इस प्रोजेक्ट में कोड बनाकर दीजिए'
+        : 'Can you help me build and run this full stack project?';
       setInput((prev) => (prev ? `${prev} ${demoSpeech}` : demoSpeech));
       return;
     }
@@ -181,16 +210,37 @@ export function Composer({
       const SpeechRecognition =
         (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
       const recognition = new SpeechRecognition();
-      recognition.lang = selectedLanguage === 'hindi' ? 'hi-IN' : 'en-US';
-      recognition.continuous = false;
-      recognition.interimResults = false;
+      recognitionRef.current = recognition;
 
-      recognition.onstart = () => setIsListening(true);
-      recognition.onend = () => setIsListening(false);
-      recognition.onerror = () => setIsListening(false);
+      // Real SpeechRecognition configuration for Hindi & English
+      recognition.lang = langToUse === 'hi' ? 'hi-IN' : 'en-US';
+      recognition.continuous = true;
+      recognition.interimResults = true;
+
+      let baselineInput = input ? `${input.trim()} ` : '';
+
+      recognition.onstart = () => {
+        setIsListening(true);
+      };
+
+      recognition.onend = () => {
+        setIsListening(false);
+      };
+
+      recognition.onerror = () => {
+        setIsListening(false);
+      };
+
       recognition.onresult = (event: any) => {
-        const transcript = event.results[0][0].transcript;
-        setInput((prev) => (prev ? `${prev} ${transcript}` : transcript));
+        let fullTranscript = '';
+        for (let i = 0; i < event.results.length; i++) {
+          fullTranscript += event.results[i][0].transcript;
+        }
+        setInput(baselineInput + fullTranscript);
+        if (textareaRef.current) {
+          textareaRef.current.style.height = 'auto';
+          textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 140)}px`;
+        }
       };
 
       recognition.start();
@@ -253,6 +303,25 @@ export function Composer({
               <div className="text-[10px] font-semibold text-[#8e918f] px-3 py-1.5 uppercase tracking-wider">
                 Attach Media or File
               </div>
+
+              {/* ✨ Generate Real Photo */}
+              <button
+                type="button"
+                onClick={() => {
+                  setInput('Generate a photorealistic image of ');
+                  setShowAttachMenu(false);
+                  setTimeout(() => textareaRef.current?.focus(), 50);
+                }}
+                className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs text-[#e3e3e3] hover:text-white hover:bg-[#282a2c] transition-colors cursor-pointer text-left"
+              >
+                <div className="w-8 h-8 rounded-lg bg-[#fbbc04]/15 flex items-center justify-center text-[#fbbc04] shrink-0">
+                  <Sparkles className="w-4 h-4" />
+                </div>
+                <div>
+                  <div className="font-medium text-white text-[13px]">Generate Real Photo</div>
+                  <div className="text-[10px] text-[#8e918f]">Flux 1024×1024 Photorealistic AI</div>
+                </div>
+              </button>
 
               {/* 📷 Upload Image */}
               <button
@@ -368,6 +437,60 @@ export function Composer({
           </div>
         )}
 
+        {/* Active Voice Listening Banner (Hindi/English Web Speech API) */}
+        {isListening && (
+          <div className="mb-2 px-3.5 py-2.5 rounded-[18px] bg-[#1a141e] border border-[#a8c7fa]/40 flex flex-wrap items-center justify-between gap-2 shadow-lg animate-in fade-in slide-in-from-bottom-1">
+            <div className="flex items-center gap-3">
+              <span className="relative flex h-3 w-3">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-3 w-3 bg-red-500"></span>
+              </span>
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-semibold text-white">
+                  Recording Voice ({voiceLang === 'hi' ? 'हिन्दी hi-IN' : 'English en-US'})
+                </span>
+                <div className="flex items-end gap-0.5 h-3 px-1">
+                  <span className="w-1 h-3 bg-[#a8c7fa] rounded-full animate-[pulse_0.6s_ease-in-out_infinite]" />
+                  <span className="w-1 h-2 bg-[#a8c7fa] rounded-full animate-[pulse_0.4s_ease-in-out_infinite_100ms]" />
+                  <span className="w-1 h-3 bg-[#a8c7fa] rounded-full animate-[pulse_0.8s_ease-in-out_infinite_200ms]" />
+                  <span className="w-1 h-1.5 bg-[#a8c7fa] rounded-full animate-[pulse_0.5s_ease-in-out_infinite_50ms]" />
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <div className="flex items-center rounded-lg bg-[#282a2c] p-0.5 border border-[#3c4043]">
+                <button
+                  type="button"
+                  onClick={() => toggleVoiceInput('hi')}
+                  className={`px-2 py-0.5 rounded text-[11px] font-medium transition-all cursor-pointer ${
+                    voiceLang === 'hi' ? 'bg-[#a8c7fa] text-[#07111f] font-semibold' : 'text-[#8e918f] hover:text-white'
+                  }`}
+                >
+                  🇮🇳 हिन्दी
+                </button>
+                <button
+                  type="button"
+                  onClick={() => toggleVoiceInput('en')}
+                  className={`px-2 py-0.5 rounded text-[11px] font-medium transition-all cursor-pointer ${
+                    voiceLang === 'en' ? 'bg-[#a8c7fa] text-[#07111f] font-semibold' : 'text-[#8e918f] hover:text-white'
+                  }`}
+                >
+                  🇬🇧 English
+                </button>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => toggleVoiceInput()}
+                className="px-2.5 py-1 rounded-lg bg-red-500/20 hover:bg-red-500/30 text-red-400 hover:text-white text-xs font-semibold cursor-pointer transition-colors"
+              >
+                Stop / Done
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Composer Bar */}
         <div className="min-h-[56px] border border-[#333538] rounded-[24px] bg-[#1e1f20] px-2.5 py-2 flex items-end gap-2 focus-within:border-[#a8c7fa]/70 transition-all shadow-lg">
           {/* Plus / Attach Button */}
@@ -394,36 +517,38 @@ export function Composer({
             onChange={handleInputResize}
             onKeyDown={handleKeyDown}
             onPaste={handlePaste}
-            placeholder="Ask anything..."
+            placeholder="Ask anything, generate photo, or write code..."
             className="flex-1 bg-transparent py-2 px-2 font-normal text-[15px] leading-[22px] text-[#e3e3e3] placeholder-[#8e918f] focus:outline-none resize-none max-h-[120px] custom-scrollbar"
           />
 
           {/* Send or Mic Action */}
-          <div className="shrink-0 mb-0.5">
-            {hasContent ? (
+          <div className="shrink-0 mb-0.5 flex items-center gap-1.5">
+            {/* Mic Button always available for voice input */}
+            <button
+              id="btn-voice-input"
+              type="button"
+              onClick={() => toggleVoiceInput()}
+              title={isListening ? 'Listening (click to stop)...' : 'Voice Input (Click to speak in Hindi or English)'}
+              className={`w-[40px] h-[40px] rounded-full flex items-center justify-center transition-all cursor-pointer ${
+                isListening
+                  ? 'bg-red-500/25 text-red-400 animate-pulse ring-2 ring-red-500/60'
+                  : 'bg-[#282a2c] text-[#8e918f] hover:text-white hover:bg-[#333538]'
+              }`}
+            >
+              <Mic className="w-4 h-4" />
+            </button>
+
+            {/* Send Button */}
+            {hasContent && (
               <button
                 id="btn-send-message"
                 type="button"
                 onClick={handleSubmit}
                 disabled={isLoading || isReadingFile}
                 title="Send message"
-                className="w-[42px] h-[42px] rounded-full bg-[#a8c7fa] hover:bg-[#c2d7ff] text-[#07111f] flex items-center justify-center transition-all cursor-pointer shadow-md active:scale-95 disabled:opacity-50"
+                className="w-[40px] h-[40px] rounded-full bg-[#a8c7fa] hover:bg-[#c2d7ff] text-[#07111f] flex items-center justify-center transition-all cursor-pointer shadow-md active:scale-95 disabled:opacity-50"
               >
                 <ArrowUp className="w-5 h-5 stroke-[2.5]" />
-              </button>
-            ) : (
-              <button
-                id="btn-voice-input"
-                type="button"
-                onClick={toggleVoiceInput}
-                title={isListening ? 'Listening...' : 'Voice Input'}
-                className={`w-[42px] h-[42px] rounded-full flex items-center justify-center transition-all cursor-pointer ${
-                  isListening
-                    ? 'bg-red-500/20 text-red-400 animate-pulse ring-2 ring-red-400/40'
-                    : 'bg-[#282a2c] text-[#8e918f] hover:text-white hover:bg-[#333538]'
-                }`}
-              >
-                <Mic className="w-4 h-4" />
               </button>
             )}
           </div>

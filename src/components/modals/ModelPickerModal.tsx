@@ -1,5 +1,19 @@
 import React from 'react';
-import { X, Sparkles, Check, Zap, Cpu, Compass } from 'lucide-react';
+import {
+  X,
+  Sparkles,
+  Check,
+  Zap,
+  Cpu,
+  Compass,
+  Bot,
+  Layers,
+  Flame,
+  MessageSquare,
+  Sun,
+  Globe,
+  Share2,
+} from 'lucide-react';
 import { Model } from '../../types';
 
 interface ModelPickerModalProps {
@@ -23,12 +37,30 @@ export function ModelPickerModal({
     switch (id) {
       case 'gemini':
         return <Sparkles className="w-4 h-4 text-[#a8c7fa]" />;
+      case 'openai':
+        return <Bot className="w-4 h-4 text-[#10a37f]" />;
       case 'groq':
         return <Zap className="w-4 h-4 text-[#fbbc04]" />;
-      case 'ollama':
-        return <Cpu className="w-4 h-4 text-[#34a853]" />;
+      case 'deepseek':
+        return <Compass className="w-4 h-4 text-[#4d6bfe]" />;
+      case 'openrouter':
+        return <Share2 className="w-4 h-4 text-[#a8c7fa]" />;
       case 'kimi':
-        return <Compass className="w-4 h-4 text-[#a8c7fa]" />;
+        return <Globe className="w-4 h-4 text-[#669df6]" />;
+      case 'cerebras':
+        return <Cpu className="w-4 h-4 text-[#fa755a]" />;
+      case 'together':
+        return <Layers className="w-4 h-4 text-[#34a853]" />;
+      case 'mistral':
+        return <Flame className="w-4 h-4 text-[#f28b82]" />;
+      case 'cohere':
+        return <MessageSquare className="w-4 h-4 text-[#f9ab00]" />;
+      case 'upstage':
+        return <Sun className="w-4 h-4 text-[#ffd600]" />;
+      case 'zai':
+        return <Sparkles className="w-4 h-4 text-[#c58af9]" />;
+      case 'ollama':
+        return <Cpu className="w-4 h-4 text-[#81c995]" />;
       default:
         return <Sparkles className="w-4 h-4 text-[#a8c7fa]" />;
     }
@@ -44,8 +76,8 @@ export function ModelPickerModal({
       />
 
       {/* Modal Dialog */}
-      <div className="relative w-full max-w-md bg-[#1e1f20] border border-[#333538] rounded-2xl p-5 shadow-2xl z-10 animate-in fade-in zoom-in-95 duration-150">
-        <div className="flex items-start justify-between mb-4">
+      <div className="relative w-full max-w-md bg-[#1e1f20] border border-[#333538] rounded-2xl p-5 shadow-2xl z-10 animate-in fade-in zoom-in-95 duration-150 max-h-[85vh] flex flex-col">
+        <div className="flex items-start justify-between mb-4 shrink-0">
           <div>
             <h3 className="text-lg font-semibold text-white">Choose a model</h3>
             <p className="text-xs text-[#8e918f] mt-0.5">
@@ -61,7 +93,7 @@ export function ModelPickerModal({
           </button>
         </div>
 
-        <div className="space-y-2">
+        <div className="space-y-2 overflow-y-auto pr-1 flex-1">
           {models.map((model) => {
             const isSelected = model.id === selectedModelId;
             return (
@@ -72,7 +104,7 @@ export function ModelPickerModal({
                   onSelectModel(model);
                   onClose();
                 }}
-                className={`w-full min-h-[58px] rounded-[15px] flex items-center px-3 gap-3 text-left transition-all cursor-pointer active:scale-[0.98] ${
+                className={`w-full min-h-[58px] rounded-[15px] flex items-center px-3 py-2 gap-3 text-left transition-all cursor-pointer active:scale-[0.98] ${
                   isSelected
                     ? 'bg-[#282a2c] ring-1 ring-[#a8c7fa]/60 shadow-sm'
                     : 'bg-[#282a2c]/70 hover:bg-[#282a2c] border border-transparent'
@@ -86,8 +118,15 @@ export function ModelPickerModal({
                   {getModelIcon(model.id)}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <div className="text-[14px] font-medium text-[#e3e3e3] truncate">
-                    {model.name}
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[14px] font-medium text-[#e3e3e3] truncate">
+                      {model.name}
+                    </span>
+                    {model.badge && (
+                      <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-[#1e1f20] text-[#a8c7fa] border border-[#333538] font-normal shrink-0">
+                        {model.badge}
+                      </span>
+                    )}
                   </div>
                   <div className="text-[11px] text-[#8e918f] mt-0.5 truncate">
                     {model.detail} • {model.provider}

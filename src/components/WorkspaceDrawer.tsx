@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   X,
   Plus,
@@ -22,6 +22,12 @@ import {
   Trash2,
   FolderGit2,
   Smartphone,
+  Download,
+  GitFork,
+  ArrowDownToLine,
+  Loader2,
+  Bot,
+  Radio,
 } from 'lucide-react';
 import { AgentPersona, WorkspaceFile, WorkspaceTool, ChatSession } from '../types';
 
@@ -46,6 +52,8 @@ interface WorkspaceDrawerProps {
   connectedGithubUser?: string | null;
   isMobileFrame?: boolean;
   onToggleFrame?: () => void;
+  isJarvisMode?: boolean;
+  onToggleJarvisMode?: () => void;
   activeTaskCount?: number;
   sessions?: ChatSession[];
   currentSessionId?: string;
@@ -74,13 +82,47 @@ export function WorkspaceDrawer({
   connectedGithubUser,
   isMobileFrame = false,
   onToggleFrame,
+  isJarvisMode = false,
+  onToggleJarvisMode,
   activeTaskCount = 0,
   sessions = [],
   currentSessionId,
   onSelectSession,
   onDeleteSession,
 }: WorkspaceDrawerProps) {
+  const [showGitImport, setShowGitImport] = useState(false);
+  const [gitRepoUrl, setGitRepoUrl] = useState('');
+  const [isCloning, setIsCloning] = useState(false);
+  const [cloneStatus, setCloneStatus] = useState<string | null>(null);
+
   if (!isOpen) return null;
+
+  const handleCloneRepo = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!gitRepoUrl.trim()) return;
+    setIsCloning(true);
+    setCloneStatus('Cloning repository into workspace...');
+    try {
+      const res = await fetch('/api/github/clone-repo', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ repoUrl: gitRepoUrl.trim() }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setCloneStatus(`✓ ${data.message}`);
+        setGitRepoUrl('');
+        onRefreshFiles();
+        setTimeout(() => setCloneStatus(null), 4000);
+      } else {
+        setCloneStatus(`✗ ${data.error || 'Clone failed'}`);
+      }
+    } catch (err: unknown) {
+      setCloneStatus(`✗ ${err instanceof Error ? err.message : 'Network error'}`);
+    } finally {
+      setIsCloning(false);
+    }
+  };
 
   const renderToolIcon = (iconName: string) => {
     switch (iconName) {
@@ -158,6 +200,38 @@ export function WorkspaceDrawer({
             <Plus className="w-5 h-5 text-[#a8c7fa]" />
             <span className="font-medium text-[15px]">New Chat</span>
           </button>
+
+          {/* Floating Assistant Mode (Jarvis Mobile Mode) */}
+          {onToggleJarvisMode && (
+            <button
+              id="btn-drawer-jarvis-mode"
+              onClick={() => {
+                onToggleJarvisMode();
+                onClose();
+              }}
+              className="w-full p-3 rounded-2xl bg-gradient-to-r from-cyan-950/60 to-blue-950/60 hover:from-cyan-900/60 hover:to-blue-900/60 border border-cyan-500/40 text-left transition-all cursor-pointer shadow-md group active:scale-[0.98]"
+            >
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-9 h-9 rounded-xl bg-cyan-500/20 border border-cyan-400/40 flex items-center justify-center text-cyan-300 group-hover:scale-105 transition-transform">
+                    <Bot className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <div className="text-xs font-bold text-white flex items-center gap-1.5">
+                      <span>Jarvis Floating Assistant</span>
+                      <span className="text-[9px] px-1.5 py-0.5 rounded bg-cyan-500/20 text-cyan-300 font-mono">
+                        APK
+                      </span>
+                    </div>
+                    <div className="text-[11px] text-cyan-200/70">
+                      Collapse IDE into floating circular avatar
+                    </div>
+                  </div>
+                </div>
+                <Radio className={`w-4 h-4 ${isJarvisMode ? 'text-cyan-400 animate-pulse' : 'text-[#8e918f]'}`} />
+              </div>
+            </button>
+          )}
 
           {/* RECENT CHATS Section */}
           <div>
@@ -246,55 +320,6 @@ export function WorkspaceDrawer({
             )}
           </div>
 
-          {/* AI AGENTS Section */}
-          <div>
-            <div className="px-2 mb-1.5 flex items-center justify-between">
-              <span className="text-[10px] font-medium tracking-[0.5px] text-[#8e918f] uppercase">
-                AI AGENTS
-              </span>
-              <span className="text-[10px] text-[#34a853] font-medium flex items-center gap-1">
-                <span className="w-1.5 h-1.5 rounded-full bg-[#34a853]" />
-                Interactive
-              </span>
-            </div>
-            <div className="space-y-1">
-              {agents.map((agent) => {
-                const isActive = agent.id === activeAgentId;
-                return (
-                  <button
-                    key={agent.id}
-                    id={`agent-${agent.id}`}
-                    onClick={() => onSelectAgent(agent.id)}
-                    className={`w-full min-h-[44px] rounded-[22px] flex items-center px-2.5 gap-2.5 transition-all text-left cursor-pointer border ${
-                      isActive
-                        ? 'bg-[#282a2c] border-[#3b82f6]/50 shadow-sm'
-                        : 'bg-transparent border-transparent hover:bg-[#282a2c]/60'
-                    }`}
-                  >
-                    <div
-                      className="w-6 h-6 rounded-full flex items-center justify-center font-bold text-[9px] text-[#111216] shrink-0"
-                      style={{ backgroundColor: agent.tint }}
-                    >
-                      {agent.initials}
-                    </div>
-                    <span className="flex-1 text-[14px] text-[#e3e3e3] font-normal truncate">
-                      {agent.name}
-                    </span>
-                    <span
-                      className={`text-[10px] rounded-[10px] px-2 py-0.5 shrink-0 ${
-                        isActive
-                          ? 'bg-[#34a853]/20 text-[#34a853] font-medium'
-                          : 'bg-[#282a2c] text-[#8e918f]'
-                      }`}
-                    >
-                      {isActive ? 'Active' : 'Idle'}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
           {/* WORKSPACE TOOLS Section */}
           <div>
             <div className="px-2 mb-1.5">
@@ -353,18 +378,109 @@ export function WorkspaceDrawer({
               <span className="text-[11px] font-semibold tracking-wider text-[#8e918f] uppercase">
                 FILES
               </span>
-              <button
-                id="btn-refresh-files"
-                onClick={onRefreshFiles}
-                disabled={isRefreshingFiles}
-                title="Refresh workspace files"
-                className="p-1 rounded hover:bg-[#282a2c] text-[#8e918f] hover:text-white transition-colors cursor-pointer"
-              >
-                <RefreshCw
-                  className={`w-3.5 h-3.5 ${isRefreshingFiles ? 'animate-spin text-[#a8c7fa]' : ''}`}
-                />
-              </button>
+              <div className="flex items-center gap-1">
+                {/* Download Workspace as ZIP */}
+                <a
+                  id="btn-download-workspace-zip"
+                  href="/api/workspace/zip"
+                  download="codepilot-workspace.zip"
+                  title="Download entire project as ZIP"
+                  className="flex items-center gap-1 px-2 py-0.5 rounded bg-[#282a2c] hover:bg-[#333538] text-[10px] text-[#a8c7fa] hover:text-white border border-[#333538] transition-colors cursor-pointer"
+                >
+                  <Download className="w-3 h-3 text-[#a8c7fa]" />
+                  <span>ZIP</span>
+                </a>
+
+                {/* Toggle GitHub Repo Import */}
+                <button
+                  id="btn-toggle-git-import"
+                  onClick={() => setShowGitImport(!showGitImport)}
+                  title="Import code from GitHub"
+                  className={`flex items-center gap-1 px-2 py-0.5 rounded border transition-colors cursor-pointer text-[10px] ${
+                    showGitImport
+                      ? 'bg-[#34a853]/20 border-[#34a853] text-[#81c995]'
+                      : 'bg-[#282a2c] hover:bg-[#333538] border-[#333538] text-[#c4c7c5] hover:text-white'
+                  }`}
+                >
+                  <GitFork className="w-3 h-3 text-[#81c995]" />
+                  <span>Import</span>
+                </button>
+
+                {/* Refresh files list */}
+                <button
+                  id="btn-refresh-files"
+                  onClick={onRefreshFiles}
+                  disabled={isRefreshingFiles}
+                  title="Refresh workspace files"
+                  className="p-1 rounded hover:bg-[#282a2c] text-[#8e918f] hover:text-white transition-colors cursor-pointer"
+                >
+                  <RefreshCw
+                    className={`w-3.5 h-3.5 ${isRefreshingFiles ? 'animate-spin text-[#a8c7fa]' : ''}`}
+                  />
+                </button>
+              </div>
             </div>
+
+            {/* GitHub Import Card */}
+            {showGitImport && (
+              <form
+                onSubmit={handleCloneRepo}
+                className="mb-3 p-2.5 rounded-xl bg-[#14161b] border border-[#333538] space-y-2 animate-in fade-in"
+              >
+                <div className="flex items-center justify-between text-[11px] font-medium text-[#e3e3e3]">
+                  <span className="flex items-center gap-1.5 text-[#81c995]">
+                    <GitFork className="w-3.5 h-3.5" />
+                    Import from GitHub
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setShowGitImport(false)}
+                    className="text-[#8e918f] hover:text-white text-[10px]"
+                  >
+                    Cancel
+                  </button>
+                </div>
+                <p className="text-[10px] text-[#8e918f]">
+                  Paste any public GitHub repository URL to clone it into your workspace:
+                </p>
+                <input
+                  type="text"
+                  placeholder="https://github.com/owner/repo"
+                  value={gitRepoUrl}
+                  onChange={(e) => setGitRepoUrl(e.target.value)}
+                  disabled={isCloning}
+                  className="w-full px-2.5 py-1.5 text-xs rounded-lg bg-[#1e2026] border border-[#3b3d45] text-white placeholder-[#6e7178] focus:outline-none focus:border-[#81c995]"
+                />
+                <div className="flex items-center justify-between pt-1">
+                  <button
+                    type="submit"
+                    disabled={isCloning || !gitRepoUrl.trim()}
+                    className="w-full flex items-center justify-center gap-1.5 py-1.5 rounded-lg bg-[#23432e] hover:bg-[#2e573c] disabled:opacity-50 text-[#81c995] hover:text-white font-medium text-xs border border-[#34a853]/40 transition-colors cursor-pointer"
+                  >
+                    {isCloning ? (
+                      <>
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        <span>Cloning Repository...</span>
+                      </>
+                    ) : (
+                      <>
+                        <ArrowDownToLine className="w-3.5 h-3.5" />
+                        <span>Clone & Import Code</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+                {cloneStatus && (
+                  <p
+                    className={`text-[10px] mt-1 truncate ${
+                      cloneStatus.startsWith('✓') ? 'text-[#81c995]' : 'text-[#f28b82]'
+                    }`}
+                  >
+                    {cloneStatus}
+                  </p>
+                )}
+              </form>
+            )}
             <div className="space-y-1">
               {files.map((file) => (
                 <button

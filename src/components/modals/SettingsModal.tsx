@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { X, Sliders, Smartphone, Monitor, Shield, Sparkles } from 'lucide-react';
 
 interface SettingsModalProps {
@@ -6,6 +6,13 @@ interface SettingsModalProps {
   onClose: () => void;
   isMobileFrame: boolean;
   onToggleFrame: () => void;
+}
+
+interface ProviderInfo {
+  configured: boolean;
+  model: string;
+  name: string;
+  status: string;
 }
 
 export function SettingsModal({
@@ -17,6 +24,20 @@ export function SettingsModal({
   const [temperature, setTemperature] = useState(0.7);
   const [streamResponses, setStreamResponses] = useState(true);
   const [savedNotice, setSavedNotice] = useState(false);
+  const [providers, setProviders] = useState<Record<string, ProviderInfo>>({});
+
+  useEffect(() => {
+    if (isOpen) {
+      fetch('/api/models/status')
+        .then((res) => res.json())
+        .then((data) => {
+          if (data?.providers) {
+            setProviders(data.providers);
+          }
+        })
+        .catch((err) => console.error('Error fetching model status:', err));
+    }
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
@@ -27,6 +48,11 @@ export function SettingsModal({
       onClose();
     }, 600);
   };
+
+  const configuredCount = (Object.values(providers) as ProviderInfo[]).filter(
+    (p) => p.configured
+  ).length;
+  const totalCount = Object.keys(providers).length;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -142,26 +168,48 @@ export function SettingsModal({
               <span className="font-semibold text-white">Configured Model Providers</span>
               <span className="text-[10px] text-[#34a853] flex items-center gap-1 font-medium">
                 <span className="w-1.5 h-1.5 rounded-full bg-[#34a853]"></span>
-                Server Integrated
+                {configuredCount > 0 ? `${configuredCount} Active Providers` : 'Server Integrated'}
               </span>
             </div>
-            <div className="grid grid-cols-2 gap-1.5 pt-1">
-              <div className="p-2 rounded-lg bg-[#282a2c] border border-[#333538] flex items-center justify-between">
-                <span className="text-[11px] text-[#e3e3e3] font-medium">Gemini 3.8</span>
-                <span className="text-[10px] text-[#34a853]">● Ready</span>
-              </div>
-              <div className="p-2 rounded-lg bg-[#282a2c] border border-[#333538] flex items-center justify-between">
-                <span className="text-[11px] text-[#e3e3e3] font-medium">Groq LPU</span>
-                <span className="text-[10px] text-[#34a853]">● Ready</span>
-              </div>
-              <div className="p-2 rounded-lg bg-[#282a2c] border border-[#333538] flex items-center justify-between">
-                <span className="text-[11px] text-[#e3e3e3] font-medium">Ollama Cloud</span>
-                <span className="text-[10px] text-[#34a853]">● Ready</span>
-              </div>
-              <div className="p-2 rounded-lg bg-[#282a2c] border border-[#333538] flex items-center justify-between">
-                <span className="text-[11px] text-[#e3e3e3] font-medium">Kimi</span>
-                <span className="text-[10px] text-[#a8c7fa]">● Loaded</span>
-              </div>
+            <div className="grid grid-cols-2 gap-1.5 pt-1 max-h-40 overflow-y-auto pr-0.5">
+              {Object.keys(providers).length > 0 ? (
+                (Object.entries(providers) as [string, ProviderInfo][]).map(([key, prov]) => (
+                  <div
+                    key={key}
+                    className="p-2 rounded-lg bg-[#282a2c] border border-[#333538] flex items-center justify-between"
+                  >
+                    <span className="text-[11px] text-[#e3e3e3] font-medium truncate max-w-[110px]">
+                      {prov.name}
+                    </span>
+                    <span
+                      className={`text-[10px] font-medium shrink-0 ${
+                        prov.configured ? 'text-[#34a853]' : 'text-[#8e918f]'
+                      }`}
+                    >
+                      {prov.configured ? '● Ready' : '○ Not set'}
+                    </span>
+                  </div>
+                ))
+              ) : (
+                <>
+                  <div className="p-2 rounded-lg bg-[#282a2c] border border-[#333538] flex items-center justify-between">
+                    <span className="text-[11px] text-[#e3e3e3] font-medium">Gemini 3.8</span>
+                    <span className="text-[10px] text-[#34a853]">● Ready</span>
+                  </div>
+                  <div className="p-2 rounded-lg bg-[#282a2c] border border-[#333538] flex items-center justify-between">
+                    <span className="text-[11px] text-[#e3e3e3] font-medium">OpenAI</span>
+                    <span className="text-[10px] text-[#34a853]">● Ready</span>
+                  </div>
+                  <div className="p-2 rounded-lg bg-[#282a2c] border border-[#333538] flex items-center justify-between">
+                    <span className="text-[11px] text-[#e3e3e3] font-medium">Groq LPU</span>
+                    <span className="text-[10px] text-[#34a853]">● Ready</span>
+                  </div>
+                  <div className="p-2 rounded-lg bg-[#282a2c] border border-[#333538] flex items-center justify-between">
+                    <span className="text-[11px] text-[#e3e3e3] font-medium">DeepSeek</span>
+                    <span className="text-[10px] text-[#34a853]">● Ready</span>
+                  </div>
+                </>
+              )}
             </div>
           </div>
 

@@ -7,6 +7,7 @@ import {
   Eye,
   Code2,
   Terminal,
+  Bot,
 } from 'lucide-react';
 import { Model } from '../types';
 
@@ -20,6 +21,8 @@ interface HeaderProps {
   activeMode: WorkspaceMode;
   onSelectMode: (mode: WorkspaceMode) => void;
   onExternalLaunch?: () => void;
+  isJarvisMode?: boolean;
+  onToggleJarvisMode?: () => void;
 }
 
 export function Header({
@@ -30,6 +33,8 @@ export function Header({
   activeMode,
   onSelectMode,
   onExternalLaunch,
+  isJarvisMode,
+  onToggleJarvisMode,
 }: HeaderProps) {
   const handleExternalLaunch = () => {
     if (onExternalLaunch) {
@@ -128,8 +133,24 @@ export function Header({
         </div>
       </div>
 
-      {/* Right: Only two essential action buttons (External Launch ↗ & Settings ⚙) */}
+      {/* Right: Floating Assistant (Jarvis Mode), External Launch ↗ & Settings ⚙ */}
       <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
+        {/* Floating Assistant (Jarvis Mode) Toggle */}
+        <button
+          id="btn-toggle-jarvis-mode"
+          onClick={onToggleJarvisMode}
+          aria-label="Floating Assistant Mode"
+          title="Floating Assistant Mode (Jarvis)"
+          className={`h-8 px-2 sm:px-2.5 rounded-lg border flex items-center gap-1.5 text-xs font-semibold transition-all cursor-pointer shrink-0 active:scale-95 ${
+            isJarvisMode
+              ? 'bg-cyan-500/25 text-cyan-300 border-cyan-400/70 shadow-[0_0_12px_rgba(6,182,212,0.4)]'
+              : 'bg-[#1e1f20] hover:bg-[#282a2c] text-[#8e918f] hover:text-cyan-300 border-[#333538]'
+          }`}
+        >
+          <Bot className="w-3.5 h-3.5 text-cyan-400 animate-pulse" />
+          <span className="hidden xs:inline">Jarvis Mode</span>
+        </button>
+
         {/* External Launch / Open in New Tab */}
         <button
           id="btn-header-external-launch"

@@ -33,6 +33,8 @@ import { ToolModal } from './components/modals/ToolModal';
 import { FileModal } from './components/modals/FileModal';
 import { SettingsModal } from './components/modals/SettingsModal';
 import { RecentChatsModal } from './components/modals/RecentChatsModal';
+import { Maximize2, Bot } from 'lucide-react';
+import { JarvisFloatingWidget } from './components/JarvisFloatingWidget';
 
 export default function App() {
   // Models & Agents
@@ -71,6 +73,9 @@ export default function App() {
 
   // Viewport mode (desktop fluid vs mobile device shell)
   const [isMobileFrame, setIsMobileFrame] = useState(false);
+
+  // Floating Assistant Mode (Jarvis Mobile Mode) - collapses heavy IDE into docked floating avatar
+  const [isJarvisMode, setIsJarvisMode] = useState(false);
 
   // Split Workspace Live Preview & Interactive Terminal
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
@@ -414,7 +419,6 @@ export default function App() {
         content: data.reply || 'No response received.',
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         modelId: data.modelUsed || currentModel.name,
-        agentPersona: activeAgent.name,
       };
 
       const finalMessages = [...updatedMessages, assistantMsg];
@@ -422,13 +426,21 @@ export default function App() {
       saveCurrentSession(finalMessages);
     } catch (err: unknown) {
       const errorText = err instanceof Error ? err.message : String(err);
+      const isBalanceError =
+        errorText.toLowerCase().includes('insufficient balance') ||
+        errorText.toLowerCase().includes('balance');
+
+      let errorContent = `⚠️ **${currentModel.name} Error**: ${errorText}`;
+      if (isBalanceError) {
+        errorContent = `⚠️ **${currentModel.name} Error**: Insufficient Account Balance\n\nYour ${currentModel.name} account balance is currently depleted or out of API quota credits.\n\n💡 **Recommended Action**:\n- **Instant Fix**: Switch to **Gemini** in the top model selector bar (fully active and available).\n- **Recharge**: Add funds or credits at the developer portal ([platform.deepseek.com](https://platform.deepseek.com)).`;
+      }
+
       const errorMsg: Message = {
         id: `msg-err-${Date.now()}`,
         role: 'assistant',
-        content: `⚠️ **${currentModel.name} Error**: ${errorText}`,
+        content: errorContent,
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         modelId: currentModel.name,
-        agentPersona: activeAgent.name,
       };
       const finalMessagesWithError = [...updatedMessages, errorMsg];
       setMessages(finalMessagesWithError);
@@ -436,6 +448,17 @@ export default function App() {
     } finally {
       setIsLoading(false);
     }
+  };
+
+  // Regenerate last assistant response
+  const handleRegenerate = async () => {
+    if (messages.length === 0 || isLoading) return;
+    const lastUserIndex = messages.map((m) => m.role).lastIndexOf('user');
+    if (lastUserIndex === -1) return;
+    const lastUserMsg = messages[lastUserIndex];
+    const previousMessages = messages.slice(0, lastUserIndex);
+    setMessages(previousMessages);
+    await handleSendMessage(lastUserMsg.content, lastUserMsg.attachment);
   };
 
   return (
@@ -473,45 +496,98 @@ export default function App() {
           onExternalLaunch={() => {
             window.open(window.location.origin, '_blank', 'noopener,noreferrer');
           }}
+          isJarvisMode={isJarvisMode}
+          onToggleJarvisMode={() => setIsJarvisMode((prev) => !prev)}
         />
 
-        {/* Main Workspace Body with Split-Pane Preview & Terminal Support */}
-        <div className="flex-1 flex overflow-hidden min-h-0 relative">
-          {/* Main Autonomous AI Chat & Interaction Section */}
-          <div className="flex-1 flex flex-col min-w-0 h-full overflow-hidden">
-            {/* Chat Stream (Scrollable message area) */}
-            <ChatStream
+        {/* Floating Assistant Mode (Jarvis Mode) vs Full IDE Workspace */}
+        {isJarvisMode ? (
+          <div className="flex-1 flex flex-col min-h-0 relative bg-[#090d14] overflow-hidden">
+            {/* Minimal Top Bar in Jarvis Mode */}
+            <div className="h-11 px-4 bg-[#0d1522]/95 backdrop-blur-md border-b border-cyan-500/30 flex items-center justify-between select-none z-20">
+              <div className="flex items-center gap-2.5">
+                <div className="w-2.5 h-2.5 rounded-full bg-cyan-400 animate-ping" />
+                <span className="text-xs font-mono font-bold text-cyan-300 tracking-wider">
+                  JARVIS FLOATING ASSISTANT
+                </span>
+                <span className="text-[10px] px-1.5 py-0.5 rounded bg-cyan-500/20 text-cyan-300 font-mono border border-cyan-400/30">
+                  MOBILE APK
+                </span>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIsJarvisMode(false)}
+                  className="px-2.5 py-1 rounded-lg bg-[#141e30] hover:bg-cyan-900/40 text-cyan-300 border border-cyan-500/40 text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer shadow-xs active:scale-95"
+                >
+                  <Maximize2 className="w-3.5 h-3.5" />
+                  <span>Full IDE</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Live Surface / Preview in Jarvis Mode */}
+            <div className="flex-1 relative overflow-hidden flex flex-col">
+              <LivePreview onClose={() => {}} isSplitView={false} />
+            </div>
+
+            {/* Floating Circular Avatar & Direct Microphone Popover */}
+            <JarvisFloatingWidget
               messages={messages}
               isLoading={isLoading}
               currentModel={currentModel}
-              onSelectPromptChip={(prompt) => handleSendMessage(prompt)}
-              starterChips={starterPromptChips}
-            />
-
-            {/* Embedded Live Interactive Bash Terminal (Collapsible bottom pane) */}
-            {isTerminalOpen && (
-              <div className="h-64 sm:h-72 shrink-0 border-t border-[#2e3036] bg-[#0e1013] p-1.5 flex flex-col transition-all animate-in slide-in-from-bottom-2">
-                <TerminalView />
-              </div>
-            )}
-
-            {/* Bottom Composer */}
-            <Composer
               onSendMessage={handleSendMessage}
-              isLoading={isLoading}
-              modelName={currentModel.name}
+              onExitJarvisMode={() => setIsJarvisMode(false)}
               selectedLanguage={selectedLanguage}
               onSelectLanguage={handleSelectLanguage}
+              onOpenTerminal={() => {
+                setIsJarvisMode(false);
+                setIsTerminalOpen(true);
+              }}
             />
           </div>
+        ) : (
+          /* Main Workspace Body with Split-Pane Preview & Terminal Support */
+          <div className="flex-1 flex overflow-hidden min-h-0 relative">
+            {/* Main Autonomous AI Chat & Interaction Section */}
+            <div className="flex-1 flex flex-col min-w-0 h-full overflow-hidden">
+              {/* Chat Stream (Scrollable message area) */}
+              <ChatStream
+                messages={messages}
+                isLoading={isLoading}
+                currentModel={currentModel}
+                onSelectPromptChip={(prompt) => handleSendMessage(prompt)}
+                starterChips={starterPromptChips}
+                onRegenerate={handleRegenerate}
+                onOpenTerminal={() => setIsTerminalOpen(true)}
+              />
 
-          {/* Live Web Preview Window (Split-Pane on Desktop) */}
-          {isPreviewOpen && (
-            <div className="w-full lg:w-[48%] xl:w-[50%] h-full shrink-0 border-l border-[#2e3036] z-10 flex flex-col animate-in slide-in-from-right-2">
-              <LivePreview onClose={() => setIsPreviewOpen(false)} isSplitView={true} />
+              {/* Embedded Live Interactive Bash Terminal (Collapsible bottom pane) */}
+              {isTerminalOpen && (
+                <div className="h-64 sm:h-72 shrink-0 border-t border-[#2e3036] bg-[#0e1013] p-1.5 flex flex-col transition-all animate-in slide-in-from-bottom-2">
+                  <TerminalView />
+                </div>
+              )}
+
+              {/* Bottom Composer */}
+              <Composer
+                onSendMessage={handleSendMessage}
+                isLoading={isLoading}
+                modelName={currentModel.name}
+                selectedLanguage={selectedLanguage}
+                onSelectLanguage={handleSelectLanguage}
+              />
             </div>
-          )}
-        </div>
+
+            {/* Live Web Preview Window (Split-Pane on Desktop) */}
+            {isPreviewOpen && (
+              <div className="w-full lg:w-[48%] xl:w-[50%] h-full shrink-0 border-l border-[#2e3036] z-10 flex flex-col animate-in slide-in-from-right-2">
+                <LivePreview onClose={() => setIsPreviewOpen(false)} isSplitView={true} />
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Mobile Shell Home Indicator */}
         {isMobileFrame && (
@@ -554,6 +630,8 @@ export default function App() {
         connectedGithubUser={connectedGithubUser}
         isMobileFrame={isMobileFrame}
         onToggleFrame={() => setIsMobileFrame((prev) => !prev)}
+        isJarvisMode={isJarvisMode}
+        onToggleJarvisMode={() => setIsJarvisMode((prev) => !prev)}
         activeTaskCount={tasks.filter((t) => t.status === 'in_progress').length}
         sessions={sessions}
         currentSessionId={currentSessionId}

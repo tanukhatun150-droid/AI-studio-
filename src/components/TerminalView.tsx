@@ -36,15 +36,16 @@ export function TerminalView({
   const [copied, setCopied] = useState(false);
   const [cwd, setCwd] = useState('~/applet');
   const [lastCommand, setLastCommand] = useState('');
+  const [customInput, setCustomInput] = useState('');
 
-  // Quick preset commands for AI Developer
+  // Quick preset commands for AI Developer (Replit Style)
   const quickCommands = [
     { label: 'git status', cmd: 'git status\n' },
     { label: 'npm run lint', cmd: 'npm run lint\n' },
     { label: 'npm run dev', cmd: 'npm run dev\n' },
     { label: 'ls -la', cmd: 'ls -la\n' },
     { label: 'node -v', cmd: 'node -v && npm -v\n' },
-    { label: 'pip list', cmd: 'python3 -m pip list 2>/dev/null || python3 --version\n' },
+    { label: 'python3', cmd: 'python3 --version 2>/dev/null || which python3\n' },
   ];
 
   // Initialize xterm and connect to WebSocket
@@ -304,6 +305,34 @@ export function TerminalView({
         ref={containerRef}
         className="flex-1 w-full h-[320px] sm:h-[400px] p-2 bg-[#0e1013] overflow-hidden"
       />
+
+      {/* Replit-style Command Runner Input Bar */}
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (!customInput.trim()) return;
+          sendCommand(`${customInput.trim()}\n`);
+          setCustomInput('');
+        }}
+        className="flex items-center gap-2 px-3 py-2 bg-[#14161b] border-t border-[#2e3036]"
+      >
+        <span className="text-[#81c995] font-mono text-xs select-none font-bold">$</span>
+        <input
+          type="text"
+          placeholder="Run any bash or node command (e.g. node -v, git status, ls -la)..."
+          value={customInput}
+          onChange={(e) => setCustomInput(e.target.value)}
+          className="flex-1 bg-[#1c1e24] border border-[#2e313a] rounded-lg px-2.5 py-1 text-xs text-white placeholder-[#6e7178] focus:outline-none focus:border-[#a8c7fa] font-mono"
+        />
+        <button
+          type="submit"
+          disabled={!customInput.trim()}
+          className="flex items-center gap-1.5 px-3 py-1 bg-[#283756] hover:bg-[#344870] disabled:opacity-40 text-[#a8c7fa] hover:text-white rounded-lg text-xs font-medium cursor-pointer transition-colors"
+        >
+          <Play className="w-3 h-3 fill-current" />
+          <span>Run</span>
+        </button>
+      </form>
     </div>
   );
 }
