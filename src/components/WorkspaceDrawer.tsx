@@ -31,6 +31,8 @@ import {
   LogIn,
   LogOut,
   User as UserIcon,
+  Moon,
+  Sun,
 } from 'lucide-react';
 import { AgentPersona, WorkspaceFile, WorkspaceTool, ChatSession, UserProfile } from '../types';
 
@@ -55,8 +57,6 @@ interface WorkspaceDrawerProps {
   connectedGithubUser?: string | null;
   isMobileFrame?: boolean;
   onToggleFrame?: () => void;
-  isJarvisMode?: boolean;
-  onToggleJarvisMode?: () => void;
   activeTaskCount?: number;
   sessions?: ChatSession[];
   currentSessionId?: string;
@@ -65,6 +65,8 @@ interface WorkspaceDrawerProps {
   currentUser?: UserProfile | null;
   onOpenAuth?: () => void;
   onSignOut?: () => void;
+  theme?: 'dark' | 'light';
+  onToggleTheme?: () => void;
 }
 
 export function WorkspaceDrawer({
@@ -88,8 +90,6 @@ export function WorkspaceDrawer({
   connectedGithubUser,
   isMobileFrame = false,
   onToggleFrame,
-  isJarvisMode = false,
-  onToggleJarvisMode,
   activeTaskCount = 0,
   sessions = [],
   currentSessionId,
@@ -98,6 +98,8 @@ export function WorkspaceDrawer({
   currentUser,
   onOpenAuth,
   onSignOut,
+  theme = 'dark',
+  onToggleTheme,
 }: WorkspaceDrawerProps) {
   const [showGitImport, setShowGitImport] = useState(false);
   const [gitRepoUrl, setGitRepoUrl] = useState('');
@@ -278,38 +280,6 @@ export function WorkspaceDrawer({
             <Plus className="w-5 h-5 text-[#a8c7fa]" />
             <span className="font-medium text-[15px]">New Chat</span>
           </button>
-
-          {/* Floating Assistant Mode (Jarvis Mobile Mode) */}
-          {onToggleJarvisMode && (
-            <button
-              id="btn-drawer-jarvis-mode"
-              onClick={() => {
-                onToggleJarvisMode();
-                onClose();
-              }}
-              className="w-full p-3 rounded-2xl bg-gradient-to-r from-cyan-950/60 to-blue-950/60 hover:from-cyan-900/60 hover:to-blue-900/60 border border-cyan-500/40 text-left transition-all cursor-pointer shadow-md group active:scale-[0.98]"
-            >
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2.5">
-                  <div className="w-9 h-9 rounded-xl bg-cyan-500/20 border border-cyan-400/40 flex items-center justify-center text-cyan-300 group-hover:scale-105 transition-transform">
-                    <Bot className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <div className="text-xs font-bold text-white flex items-center gap-1.5">
-                      <span>Jarvis Floating Assistant</span>
-                      <span className="text-[9px] px-1.5 py-0.5 rounded bg-cyan-500/20 text-cyan-300 font-mono">
-                        APK
-                      </span>
-                    </div>
-                    <div className="text-[11px] text-cyan-200/70">
-                      Collapse IDE into floating circular avatar
-                    </div>
-                  </div>
-                </div>
-                <Radio className={`w-4 h-4 ${isJarvisMode ? 'text-cyan-400 animate-pulse' : 'text-[#8e918f]'}`} />
-              </div>
-            </button>
-          )}
 
           {/* RECENT CHATS Section */}
           <div>
@@ -596,6 +566,41 @@ export function WorkspaceDrawer({
           </div>
         </div>
 
+        {/* Prominent Dark/Light Mode Switcher Row */}
+        {onToggleTheme && (
+          <div className="px-5 py-3 border-t border-[#333538] bg-[#1a1b1e] flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              {theme === 'light' ? (
+                <Sun className="w-4 h-4 text-amber-500" />
+              ) : (
+                <Moon className="w-4 h-4 text-[#a8c7fa]" />
+              )}
+              <span className="text-xs font-semibold text-[#e3e3e3]">
+                {theme === 'light' ? 'Light Theme' : 'Dark Theme'}
+              </span>
+            </div>
+
+            <button
+              id="drawer-theme-toggle-btn"
+              type="button"
+              onClick={onToggleTheme}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#282a2c] hover:bg-[#333538] text-xs font-semibold text-[#e3e3e3] border border-[#383b42] transition-all cursor-pointer shadow-xs active:scale-95"
+            >
+              {theme === 'light' ? (
+                <>
+                  <Moon className="w-3.5 h-3.5 text-blue-400" />
+                  <span>🌙 Dark</span>
+                </>
+              ) : (
+                <>
+                  <Sun className="w-3.5 h-3.5 text-amber-400" />
+                  <span>☀️ Light</span>
+                </>
+              )}
+            </button>
+          </div>
+        )}
+
         {/* Drawer Footer Actions matching index.tsx sheetFooter */}
         <div className="px-5 py-3.5 border-t border-[#333538] bg-[#1e1f20] flex items-center justify-between">
           <button
@@ -609,6 +614,22 @@ export function WorkspaceDrawer({
             <BookOpen className="w-4 h-4 text-[#8e918f]" />
             <span>Memory</span>
           </button>
+
+          {onToggleTheme && (
+            <button
+              id="drawer-footer-theme"
+              onClick={onToggleTheme}
+              title={`Switch to ${theme === 'light' ? 'Dark' : 'Light'} Mode`}
+              className="flex items-center gap-1.5 p-1 text-[#8e918f] hover:text-[#e3e3e3] text-[12px] font-medium transition-colors cursor-pointer"
+            >
+              {theme === 'light' ? (
+                <Moon className="w-4 h-4 text-blue-400" />
+              ) : (
+                <Sun className="w-4 h-4 text-amber-400" />
+              )}
+              <span>{theme === 'light' ? 'Dark' : 'Light'}</span>
+            </button>
+          )}
 
           {onToggleFrame && (
             <button

@@ -15,6 +15,7 @@
     "moduleDetection": "force",
     "allowJs": true,
     "jsx": "react-jsx",
+    "types": ["node", "vite/client"],
     "paths": {
       "@/*": [
         "./*"
@@ -30,7 +31,6 @@
     "server.ts"
   ],
   "exclude": [
-    "_imported_source",
     "node_modules",
     "dist"
   ]

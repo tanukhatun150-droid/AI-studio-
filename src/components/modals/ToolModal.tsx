@@ -54,7 +54,7 @@ export function ToolModal({ isOpen, tool, onClose }: ToolModalProps) {
   const [isDeploying, setIsDeploying] = useState(false);
 
   // Real GitHub Git state
-  const [repoUrl, setRepoUrl] = useState('https://github.com/skssoyel94-lang/AI-Agent-Home-UI.git');
+  const [repoUrl, setRepoUrl] = useState('https://github.com/tanukhatun150-droid/AI-studio-.git');
   const [githubToken, setGithubToken] = useState('');
   const [branchName, setBranchName] = useState('main');
   const [commitMsg, setCommitMsg] = useState('feat: autonomous AI developer updates & real git integration');
@@ -258,7 +258,9 @@ export function ToolModal({ isOpen, tool, onClose }: ToolModalProps) {
         <div className="flex-1 overflow-y-auto py-4 space-y-4 custom-scrollbar">
           {/* Tool: TERMINAL */}
           {tool.id === 'terminal' && (
-            <TerminalView />
+            <div className="h-[420px] sm:h-[480px] w-full flex flex-col">
+              <TerminalView />
+            </div>
           )}
 
           {/* Tool: PACKAGES */}

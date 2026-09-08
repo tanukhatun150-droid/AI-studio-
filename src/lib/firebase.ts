@@ -19,13 +19,13 @@ import {
 // Your web app's Firebase configuration
 // For Firebase JS SDK v7.20.0 and later, measurementId is optional
 export const firebaseConfig = {
-  apiKey: "AIzaSyDX835Pi2KFcAoXJiMtu_Y-JG2Oj3xVFeY",
-  authDomain: "codepilot-aii.firebaseapp.com",
-  projectId: "codepilot-aii",
-  storageBucket: "codepilot-aii.firebasestorage.app",
-  messagingSenderId: "153889116171",
-  appId: "1:153889116171:web:01f097e3d5c1c8a2b8b70e",
-  measurementId: "G-CPH0PLNY37"
+  apiKey: (typeof import.meta !== 'undefined' && import.meta.env?.VITE_FIREBASE_API_KEY) || "AIzaSyDX835Pi2KFcAoXJiMtu_Y-JG2Oj3xVFeY",
+  authDomain: (typeof import.meta !== 'undefined' && import.meta.env?.VITE_FIREBASE_AUTH_DOMAIN) || "codepilot-aii.firebaseapp.com",
+  projectId: (typeof import.meta !== 'undefined' && import.meta.env?.VITE_FIREBASE_PROJECT_ID) || "codepilot-aii",
+  storageBucket: (typeof import.meta !== 'undefined' && import.meta.env?.VITE_FIREBASE_STORAGE_BUCKET) || "codepilot-aii.firebasestorage.app",
+  messagingSenderId: (typeof import.meta !== 'undefined' && import.meta.env?.VITE_FIREBASE_MESSAGING_SENDER_ID) || "153889116171",
+  appId: (typeof import.meta !== 'undefined' && import.meta.env?.VITE_FIREBASE_APP_ID) || "1:153889116171:web:01f097e3d5c1c8a2b8b70e",
+  measurementId: (typeof import.meta !== 'undefined' && import.meta.env?.VITE_FIREBASE_MEASUREMENT_ID) || "G-CPH0PLNY37"
 };
 
 // Initialize Firebase (singleton pattern prevents duplicate app init)

@@ -2,6 +2,14 @@ import { AgentPersona, MemoryItem, Model, WorkspaceFile, WorkspaceTask, Workspac
 
 export const initialModels: Model[] = [
   {
+    id: 'codepilot-native',
+    name: 'CodePilot Native',
+    detail: 'In-House Core (Zero Config)',
+    badge: 'No API Key Required',
+    provider: 'App Native Engine',
+    description: 'App ka apna in-house autonomous intelligence engine. Isme kisi external API key ki bilkul zaroorat nahi hai—hamesha 100% free, active aur instant ready rehta hai.',
+  },
+  {
     id: 'gemini',
     name: 'Gemini',
     detail: 'Gemini 3.8 Flash',
@@ -201,141 +209,158 @@ export const initialWorkspaceTools: WorkspaceTool[] = [
 
 export const initialWorkspaceFiles: WorkspaceFile[] = [
   {
-    id: 'file-1',
-    name: 'index.tsx',
-    path: 'artifacts/ai-agent-home-mobile/app/index.tsx',
-    type: 'file',
-    size: 54054,
-    content: `// Primary AI Agent Home UI mobile screen
-import React, { useState, useRef, useEffect } from 'react';
-import { View, Text, StyleSheet, FlatList } from 'react-native';
-
-export default function HomeScreen() {
-  // Model picker, composer, sheet drawer, tasks & memory
-  return (
-    <View style={styles.screen}>
-      <HomeOverview colors={colors} />
-    </View>
-  );
-}`,
-  },
-  {
-    id: 'file-2',
-    name: 'colors.ts',
-    path: 'artifacts/ai-agent-home-mobile/constants/colors.ts',
-    type: 'file',
-    size: 1067,
-    content: `export const colors = {
-  background: '#111216',
-  foreground: '#e3e3e3',
-  card: '#1e1f20',
-  cardForeground: '#e3e3e3',
-  primary: '#a8c7fa',
-  primaryForeground: '#07111f',
-  secondary: '#282a2c',
-  secondaryForeground: '#e3e3e3',
-  muted: '#282a2c',
-  mutedForeground: '#8e918f',
-  accent: '#3b82f6',
-  border: '#333538',
-  input: '#282a2c',
-};`,
-  },
-  {
-    id: 'file-3',
-    name: 'AuthShell.tsx',
-    path: 'artifacts/ai-agent-home-mobile/components/AuthShell.tsx',
-    type: 'file',
-    size: 7811,
-    content: `import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
-
-export function AuthShell({ children, title, subtitle }: AuthShellProps) {
-  return (
-    <View style={styles.container}>
-      <Text style={styles.title}>{title}</Text>
-      <Text style={styles.subtitle}>{subtitle}</Text>
-      {children}
-    </View>
-  );
-}`,
-  },
-  {
-    id: 'file-4',
+    id: 'file-package-json',
     name: 'package.json',
-    path: 'artifacts/ai-agent-home-mobile/package.json',
+    path: '/package.json',
     type: 'file',
-    size: 1420,
+    size: 1459,
     content: `{
-  "name": "@workspace/ai-agent-home-mobile",
+  "name": "codepilot-ai",
+  "private": true,
   "version": "1.0.0",
-  "main": "expo-router/entry",
-  "dependencies": {
-    "expo": "~52.0.0",
-    "expo-router": "~4.0.0",
-    "react-native": "0.76.0"
+  "type": "module",
+  "scripts": {
+    "dev": "tsx server.ts",
+    "build": "vite build && esbuild server.ts --bundle --platform=node --format=cjs --packages=external --sourcemap --outfile=dist/server.cjs",
+    "start": "node dist/server.cjs",
+    "preview": "vite preview",
+    "lint": "tsc --noEmit",
+    "cap:sync": "cap sync",
+    "cap:android": "cap add android",
+    "cap:build": "vite build && cap sync android"
   }
 }`,
   },
   {
-    id: 'file-5',
-    name: 'app.json',
-    path: 'artifacts/ai-agent-home-mobile/app.json',
+    id: 'file-server-ts',
+    name: 'server.ts',
+    path: '/server.ts',
     type: 'file',
-    size: 980,
-    content: `{
-  "expo": {
-    "name": "AI Agent Home",
-    "slug": "ai-agent-home-mobile",
-    "scheme": "ai-agent-home",
-    "version": "1.0.0",
-    "orientation": "portrait",
-    "userInterfaceStyle": "dark"
-  }
-}`,
-  },
-  {
-    id: 'file-6',
-    name: 'workspace',
-    path: 'artifacts/api-server/src/routes/workspace.ts',
-    type: 'file',
-    size: 2029,
-    content: `import { Router } from "express";
-import { readWorkspaceFiles } from "../lib/workspace";
+    size: 110787,
+    content: `import express from 'express';
+import http from 'http';
+import path from 'path';
+import 'dotenv/config';
+import { GoogleGenAI } from '@google/genai';
+import { createServer as createViteServer } from 'vite';
+import { WebSocketServer } from 'ws';
 
-const router = Router();
-router.get("/workspace/files", (req, res) => {
-  res.json({ files: readWorkspaceFiles(), root: "ai-agent-home-mobile" });
-});
-export default router;`,
+const PORT = 3000;
+// Full-stack Node.js server with real Gemini AI, bash shell and GitHub APIs`,
   },
   {
-    id: 'file-7',
-    name: 'components',
-    path: 'artifacts/ai-agent-home-mobile/components',
-    type: 'directory',
+    id: 'file-app-tsx',
+    name: 'App.tsx',
+    path: '/src/App.tsx',
+    type: 'file',
+    size: 32019,
+    content: `// Main CodePilot AI Workspace interface with Jarvis Assistant, real terminal & files`,
   },
   {
-    id: 'file-8',
-    name: 'constants',
-    path: 'artifacts/ai-agent-home-mobile/constants',
-    type: 'directory',
+    id: 'file-vite-config',
+    name: 'vite.config.ts',
+    path: '/vite.config.ts',
+    type: 'file',
+    size: 850,
+    content: `import { defineConfig } from 'vite';
+import react from '@vitejs/plugin-react';
+import tailwindcss from '@tailwindcss/vite';
+
+export default defineConfig({
+  plugins: [react(), tailwindcss()],
+  server: {
+    host: '0.0.0.0',
+    port: 3000,
+  },
+});`,
+  },
+  {
+    id: 'file-env-example',
+    name: '.env.example',
+    path: '/.env.example',
+    type: 'file',
+    size: 380,
+    content: `GEMINI_API_KEY=
+FIREBASE_API_KEY=
+FIREBASE_SERVICE_ACCOUNT_KEY=
+GITHUB_TOKEN=
+OPENAI_API_KEY=
+GROQ_API_KEY=`,
+  },
+  {
+    id: 'file-metadata-json',
+    name: 'metadata.json',
+    path: '/metadata.json',
+    type: 'file',
+    size: 350,
+    content: `{
+  "name": "CodePilot AI",
+  "description": "Full-stack AI workspace with Gemini agent, real bash terminal, GitHub integration, and live preview.",
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}`,
   },
 ];
 
 export const initialWorkspaceTasks: WorkspaceTask[] = [
   {
     id: 'task-1',
-    title: 'Mobile workspace import',
-    progress: 72,
-    detail: 'Converting desktop interactions into native touch patterns',
+    title: 'Full-Stack Architecture & Environment Setup',
+    progress: 100,
+    detail: 'Normalized repository to npm, Node 22, Express server, and Vite frontend',
+    status: 'completed',
+    items: [
+      { id: 't-1-1', title: 'Normalize dependencies and package manager to npm', completed: true },
+      { id: 't-1-2', title: 'Configure Express server on port 3000 at 0.0.0.0', completed: true },
+      { id: 't-1-3', title: 'Setup Vite middleware and client bundle', completed: true },
+      { id: 't-1-4', title: 'Clean legacy monorepo artifacts and files', completed: true },
+    ],
+  },
+  {
+    id: 'task-2',
+    title: 'Google Gemini & AI Multi-Model Intelligence',
+    progress: 100,
+    detail: 'Server-side @google/genai SDK integration with fallback multi-model routing',
+    status: 'completed',
+    items: [
+      { id: 't-2-1', title: 'Implement server-side Gemini 3.8 Flash streaming & tools', completed: true },
+      { id: 't-2-2', title: 'Support autonomous workspace file creation and editing', completed: true },
+      { id: 't-2-3', title: 'Multilingual Hinglish, Hindi, and English natural fluency', completed: true },
+    ],
+  },
+  {
+    id: 'task-3',
+    title: 'Real Interactive Bash Terminal & Git Integration',
+    progress: 100,
+    detail: 'Full WebSocket terminal with xterm-256color and simple-git push/clone',
+    status: 'completed',
+    items: [
+      { id: 't-3-1', title: 'WebSocket server streaming /bin/bash shell on /ws/terminal', completed: true },
+      { id: 't-3-2', title: 'Connect @xterm/xterm frontend with FitAddon & resize support', completed: true },
+      { id: 't-3-3', title: 'Live GitHub Connect via Personal Access Token & OAuth', completed: true },
+    ],
+  },
+  {
+    id: 'task-4',
+    title: 'Firebase Authentication & Cloud Sync',
+    progress: 85,
+    detail: 'Google OAuth, Email/Password sign-in, and Firebase Admin SDK verification',
     status: 'in_progress',
     items: [
-      { id: 't-1', title: 'Implement collapsible workspace drawer', completed: true },
-      { id: 't-2', title: 'Wire multi-model selector pill and modal', completed: true },
-      { id: 't-3', title: 'Build file preview inspection modal', completed: true },
-      { id: 't-4', title: 'Attach file upload drag-and-drop & interactive simulation', completed: false },
-      { id: 't-5', title: 'Refine desktop vs mobile viewport wrapper', completed: false },
+      { id: 't-4-1', title: 'Initialize Firebase Web Client SDK with Auth', completed: true },
+      { id: 't-4-2', title: 'Lazy load Firebase Admin SDK on backend', completed: true },
+      { id: 't-4-3', title: 'Verify user ID tokens via /api/firebase/verify-token', completed: true },
+    ],
+  },
+  {
+    id: 'task-5',
+    title: 'Capacitor Android APK Build Pipeline',
+    progress: 90,
+    detail: 'Mobile wrapper and APK sync configuration using @capacitor/core',
+    status: 'in_progress',
+    items: [
+      { id: 't-5-1', title: 'Capacitor configuration and android assets', completed: true },
+      { id: 't-5-2', title: 'Jarvis floating assistant mobile mode', completed: true },
+      { id: 't-5-3', title: 'PWA Web App Manifest & responsive mobile viewport', completed: true },
     ],
   },
 ];
@@ -343,34 +368,40 @@ export const initialWorkspaceTasks: WorkspaceTask[] = [
 export const initialMemoryItems: MemoryItem[] = [
   {
     id: 'mem-1',
-    key: 'Framework',
-    value: 'Expo + React Native',
+    key: 'Framework & Stack',
+    value: 'React 19 + TypeScript + Express + Vite (Tailwind CSS)',
     category: 'stack',
   },
   {
     id: 'mem-2',
-    key: 'Architecture',
-    value: 'Mobile-first workspace with local persistence',
+    key: 'AI Provider',
+    value: 'Google AI Gemini (@google/genai) running server-side with multi-model fallbacks',
     category: 'architecture',
   },
   {
     id: 'mem-3',
-    key: 'Repository',
-    value: 'https://github.com/skssoyel94-lang/AI-Agent-Home-UI.git',
+    key: 'Source Repository',
+    value: 'https://github.com/tanukhatun150-droid/AI-studio-',
     category: 'stack',
   },
   {
     id: 'mem-4',
-    key: 'Theme Colors',
-    value: 'Dark (#111216 background, #1e1f20 card, #282a2c secondary, #a8c7fa primary)',
+    key: 'Terminal & Workspace',
+    value: 'Real /bin/bash Linux terminal via WebSockets, live filesystem CRUD',
+    category: 'architecture',
+  },
+  {
+    id: 'mem-5',
+    key: 'Mobile Runtime',
+    value: 'Capacitor Android + PWA installable with Jarvis floating mode',
     category: 'preference',
   },
 ];
 
 export const starterPromptChips = [
   '🔐 Sign in with Firebase (Google, GitHub, Email)',
-  '✨ Generate a photorealistic AI image of futuristic coder',
-  '🌐 World me kya ho raha hai? Latest news check karo',
-  '⚡ Write a Python script and run it in Replit terminal',
+  '✨ Generate code with Google Gemini AI',
+  '⚡ Run commands in real Linux Bash terminal',
+  '🐙 Connect GitHub and sync repositories',
   'इस प्रोजेक्ट का कोड समझाइए (Explain in Hindi)',
 ];

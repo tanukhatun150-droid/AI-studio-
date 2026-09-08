@@ -35,6 +35,8 @@ export function ModelPickerModal({
 
   const getModelIcon = (id: string) => {
     switch (id) {
+      case 'codepilot-native':
+        return <Cpu className="w-4 h-4 text-[#81c995]" />;
       case 'gemini':
         return <Sparkles className="w-4 h-4 text-[#a8c7fa]" />;
       case 'openai':
@@ -123,7 +125,13 @@ export function ModelPickerModal({
                       {model.name}
                     </span>
                     {model.badge && (
-                      <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-[#1e1f20] text-[#a8c7fa] border border-[#333538] font-normal shrink-0">
+                      <span
+                        className={`text-[10px] px-1.5 py-0.5 rounded-full border font-normal shrink-0 ${
+                          model.id === 'codepilot-native'
+                            ? 'bg-[#132d1f] text-[#81c995] border-[#1d4d33] font-medium'
+                            : 'bg-[#1e1f20] text-[#a8c7fa] border-[#333538]'
+                        }`}
+                      >
                         {model.badge}
                       </span>
                     )}

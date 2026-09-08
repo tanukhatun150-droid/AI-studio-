@@ -20,7 +20,7 @@ import {
   ChatSession,
   UserProfile,
 } from './types';
-import { Header } from './components/Header';
+import { Header, WorkspaceMode } from './components/Header';
 import { WorkspaceDrawer } from './components/WorkspaceDrawer';
 import { ChatStream } from './components/ChatStream';
 import { Composer } from './components/Composer';
@@ -55,8 +55,41 @@ export default function App() {
   // Workspace Files, Tools, Tasks, Memory
   const [tools] = useState<WorkspaceTool[]>(initialWorkspaceTools);
   const [files, setFiles] = useState<WorkspaceFile[]>(initialWorkspaceFiles);
-  const [tasks, setTasks] = useState<WorkspaceTask[]>(initialWorkspaceTasks);
-  const [memories, setMemories] = useState<MemoryItem[]>(initialMemoryItems);
+  const [tasks, setTasks] = useState<WorkspaceTask[]>(() => {
+    try {
+      const saved = localStorage.getItem('codepilot_workspace_tasks');
+      if (saved) return JSON.parse(saved);
+    } catch {
+      // ignore
+    }
+    return initialWorkspaceTasks;
+  });
+  const [memories, setMemories] = useState<MemoryItem[]>(() => {
+    try {
+      const saved = localStorage.getItem('codepilot_workspace_memories');
+      if (saved) return JSON.parse(saved);
+    } catch {
+      // ignore
+    }
+    return initialMemoryItems;
+  });
+
+  // Save tasks and memories to localStorage
+  useEffect(() => {
+    try {
+      localStorage.setItem('codepilot_workspace_tasks', JSON.stringify(tasks));
+    } catch {
+      // ignore
+    }
+  }, [tasks]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('codepilot_workspace_memories', JSON.stringify(memories));
+    } catch {
+      // ignore
+    }
+  }, [memories]);
 
   // Chat Messages
   const [messages, setMessages] = useState<Message[]>(() => {
@@ -122,6 +155,7 @@ export default function App() {
   };
 
   useEffect(() => {
+    syncWorkspaceFiles();
     checkGithubStatus();
 
     const handleMessage = (event: MessageEvent) => {
@@ -202,6 +236,38 @@ export default function App() {
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
     };
     setMessages((prev) => [...prev, logoutMsg]);
+  };
+
+  // Theme State (Dark / Light Mode) with persistence and document attribute sync
+  const [theme, setTheme] = useState<'dark' | 'light'>(() => {
+    try {
+      const saved = localStorage.getItem('codepilot_theme');
+      if (saved === 'light' || saved === 'dark') return saved;
+    } catch {
+      // ignore
+    }
+    return 'dark';
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('codepilot_theme', theme);
+    } catch {
+      // ignore
+    }
+    if (theme === 'light') {
+      document.documentElement.classList.add('light');
+      document.documentElement.classList.remove('dark');
+      document.documentElement.setAttribute('data-theme', 'light');
+    } else {
+      document.documentElement.classList.add('dark');
+      document.documentElement.classList.remove('light');
+      document.documentElement.setAttribute('data-theme', 'dark');
+    }
+  }, [theme]);
+
+  const handleToggleTheme = () => {
+    setTheme((prev) => (prev === 'dark' ? 'light' : 'dark'));
   };
 
   // Active workspace mode: preview, code, or terminal
@@ -376,12 +442,29 @@ export default function App() {
     setMemories((prev) => prev.filter((m) => m.id !== id));
   };
 
-  // Refresh files simulation
-  const handleRefreshFiles = () => {
+  // Add new workspace task
+  const handleAddNewTask = (title: string, detail?: string) => {
+    const newTask: WorkspaceTask = {
+      id: `task-${Date.now()}`,
+      title,
+      detail: detail || 'Custom workspace milestone',
+      progress: 0,
+      status: 'in_progress',
+      items: [],
+    };
+    setTasks((prev) => [...prev, newTask]);
+  };
+
+  // Delete workspace task
+  const handleDeleteTask = (taskId: string) => {
+    setTasks((prev) => prev.filter((t) => t.id !== taskId));
+  };
+
+  // Real workspace files synchronization
+  const handleRefreshFiles = async () => {
     setIsRefreshingFiles(true);
-    setTimeout(() => {
-      setIsRefreshingFiles(false);
-    }, 700);
+    await syncWorkspaceFiles();
+    setIsRefreshingFiles(false);
   };
 
   // Save or update session in recent chats
@@ -516,6 +599,8 @@ export default function App() {
         content: data.reply || 'No response received.',
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         modelId: data.modelUsed || currentModel.name,
+        toolSteps: data.toolSteps,
+        filesModified: data.filesModified,
       };
 
       // Auto-refresh Live Preview and sync workspace files when files are modified
@@ -699,10 +784,15 @@ export default function App() {
                 }}
               />
 
-              {/* Embedded Live Interactive Bash Terminal (Collapsible bottom pane) */}
+              {/* Dedicated Terminal Page (Screenshot-faithful full view on mobile & desktop) */}
               {isTerminalOpen && (
-                <div className="h-64 sm:h-72 shrink-0 border-t border-[#2e3036] bg-[#0e1013] p-1.5 flex flex-col transition-all animate-in slide-in-from-bottom-2">
-                  <TerminalView />
+                <div className="fixed inset-0 z-50 bg-[#161719] flex flex-col animate-in fade-in duration-150">
+                  <TerminalView
+                    onClose={() => {
+                      setIsTerminalOpen(false);
+                      handleSelectWorkspaceMode('code');
+                    }}
+                  />
                 </div>
               )}
 
@@ -759,7 +849,7 @@ export default function App() {
         }}
         files={files}
         onSelectFile={(file) => setSelectedFile(file)}
-        onRefreshFiles={handleRefreshFiles}
+        onRefreshFiles={syncWorkspaceFiles}
         isRefreshingFiles={isRefreshingFiles}
         onNewChat={handleNewChat}
         onOpenTasks={() => setIsTasksOpen(true)}
@@ -783,6 +873,8 @@ export default function App() {
           setIsAuthOpen(true);
         }}
         onSignOut={handleSignOut}
+        theme={theme}
+        onToggleTheme={handleToggleTheme}
       />
 
       {/* GitHub Connect & Repository Manager Modal */}
@@ -825,6 +917,8 @@ export default function App() {
         tasks={tasks}
         onToggleTaskItem={handleToggleTaskItem}
         onAddTaskItem={handleAddTaskItem}
+        onAddNewTask={handleAddNewTask}
+        onDeleteTask={handleDeleteTask}
       />
 
       {/* Memory Modal */}

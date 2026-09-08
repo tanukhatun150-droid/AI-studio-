@@ -10,6 +10,20 @@ export interface ChatAttachment {
   mediaType?: 'image' | 'video' | 'audio' | 'file';
 }
 
+export interface AgentExecutionStep {
+  step: number;
+  tool: string;
+  args: Record<string, any>;
+  result: {
+    success: boolean;
+    tool?: string;
+    error?: string;
+    [key: string]: any;
+  };
+  summary: string;
+  durationMs: number;
+}
+
 export interface Message {
   id: string;
   role: MessageRole;
@@ -18,6 +32,8 @@ export interface Message {
   modelId?: string;
   attachment?: ChatAttachment;
   agentPersona?: string;
+  toolSteps?: AgentExecutionStep[];
+  filesModified?: Array<{ path: string; action: string; lines?: number }>;
 }
 
 export interface Model {
@@ -99,6 +115,8 @@ export interface ChatSession {
 }
 
 export type AuthProvider = 'google' | 'github' | 'email' | 'firebase';
+
+export type AppTab = 'home' | 'projects' | 'agent' | 'terminal' | 'settings';
 
 export interface UserProfile {
   id: string;

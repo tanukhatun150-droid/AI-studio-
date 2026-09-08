@@ -25,6 +25,7 @@ import { ChatAttachment, Message, Model } from '../types';
 import { ReplitCodeBlock } from './ReplitCodeBlock';
 import { GeneratedImageCard } from './GeneratedImageCard';
 import { ActionBadge } from './ActionBadge';
+import { AgentExecutionSteps } from './AgentExecutionSteps';
 
 interface ChecklistItem {
   status: 'completed' | 'in_progress' | 'pending';
@@ -1014,6 +1015,15 @@ export function ChatStream({
                             </div>
                             <Loader2 className="w-3.5 h-3.5 text-[#a8c7fa] animate-spin shrink-0 opacity-80" />
                           </div>
+                        )}
+
+                        {/* 2.5 Real Autonomous Agent Tool Executions Timeline */}
+                        {message.toolSteps && message.toolSteps.length > 0 && (
+                          <AgentExecutionSteps
+                            steps={message.toolSteps}
+                            onOpenFile={onOpenFile}
+                            onOpenTerminal={onOpenTerminal}
+                          />
                         )}
 
                         {/* 3. Task Checklist Cards with Progress Bar */}

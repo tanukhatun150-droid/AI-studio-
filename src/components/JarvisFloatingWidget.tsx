@@ -31,6 +31,7 @@ interface JarvisFloatingWidgetProps {
   selectedLanguage: 'english' | 'hindi' | 'auto';
   onSelectLanguage: (lang: 'english' | 'hindi' | 'auto') => void;
   onOpenTerminal?: () => void;
+  defaultOpen?: boolean;
 }
 
 export function JarvisFloatingWidget({
@@ -42,9 +43,10 @@ export function JarvisFloatingWidget({
   selectedLanguage,
   onSelectLanguage,
   onOpenTerminal,
+  defaultOpen = true,
 }: JarvisFloatingWidgetProps) {
   // Popover open state (false = circular avatar docked at screen edge, true = compact voice+chat popover)
-  const [isOpen, setIsOpen] = useState(false);
+  const [isOpen, setIsOpen] = useState(defaultOpen);
 
   // Position of the floating circular avatar
   const [position, setPosition] = useState<{ x: number; y: number }>(() => {
@@ -74,8 +76,13 @@ export function JarvisFloatingWidget({
   const [inputVal, setInputVal] = useState('');
   const [isSpeaking, setIsSpeaking] = useState(false);
 
-  // Dragging support
+  // Dragging support with smooth pointer capture
   const handlePointerDown = (e: React.PointerEvent) => {
+    try {
+      (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+    } catch {
+      // ignore
+    }
     dragStartRef.current = {
       startX: e.clientX,
       startY: e.clientY,
@@ -90,7 +97,7 @@ export function JarvisFloatingWidget({
     const dx = e.clientX - dragStartRef.current.startX;
     const dy = e.clientY - dragStartRef.current.startY;
 
-    if (Math.abs(dx) > 6 || Math.abs(dy) > 6) {
+    if (Math.abs(dx) > 4 || Math.abs(dy) > 4) {
       setIsDragging(true);
       const newX = Math.min(
         Math.max(10, dragStartRef.current.posX + dx),
@@ -104,8 +111,13 @@ export function JarvisFloatingWidget({
     }
   };
 
-  const handlePointerUp = () => {
-    setTimeout(() => setIsDragging(false), 50);
+  const handlePointerUp = (e: React.PointerEvent) => {
+    try {
+      (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
+    } catch {
+      // ignore
+    }
+    setTimeout(() => setIsDragging(false), 60);
   };
 
   // Speech Recognition hook
@@ -404,6 +416,17 @@ export function JarvisFloatingWidget({
                 </>
               )}
             </div>
+
+            {/* Audio waveform equalizer bars */}
+            {isListening && (
+              <div className="flex items-center gap-1 my-1.5 h-5">
+                <span className="w-1 bg-cyan-400 rounded-full animate-[bounce_0.6s_infinite_100ms] h-3" />
+                <span className="w-1 bg-red-400 rounded-full animate-[bounce_0.6s_infinite_200ms] h-5" />
+                <span className="w-1 bg-cyan-300 rounded-full animate-[bounce_0.6s_infinite_300ms] h-4" />
+                <span className="w-1 bg-teal-300 rounded-full animate-[bounce_0.6s_infinite_400ms] h-5" />
+                <span className="w-1 bg-cyan-400 rounded-full animate-[bounce_0.6s_infinite_500ms] h-2.5" />
+              </div>
+            )}
 
             {/* Interim voice transcript feedback */}
             {interimTranscript && (

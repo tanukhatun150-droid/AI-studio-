@@ -1,1 +1,80 @@
 @import "tailwindcss";
+
+/* Light Mode Overrides for System-wide Theming */
+html.light,
+[data-theme="light"] {
+  color-scheme: light;
+}
+
+html.light body {
+  background-color: #f8fafc !important;
+  color: #0f172a !important;
+}
+
+html.light .bg-\[\#111216\],
+html.light .bg-\[\#0e1013\],
+html.light .bg-\[\#161719\] {
+  background-color: #f8fafc !important;
+}
+
+html.light .bg-\[\#1e1f20\],
+html.light .bg-\[\#141619\],
+html.light .bg-\[\#1b1d20\] {
+  background-color: #ffffff !important;
+}
+
+html.light .bg-\[\#282a2c\],
+html.light .bg-\[\#232529\],
+html.light .bg-\[\#25272a\],
+html.light .bg-\[\#202225\] {
+  background-color: #f1f5f9 !important;
+}
+
+html.light .border-\[\#333538\],
+html.light .border-\[\#2e3036\],
+html.light .border-\[\#25272a\],
+html.light .border-\[\#32353a\],
+html.light .border-\[\#383b42\] {
+  border-color: #e2e8f0 !important;
+}
+
+html.light .text-\[\#e3e3e3\],
+html.light .text-\[\#c4c7c5\],
+html.light .text-\[\#f1f3f4\] {
+  color: #1e293b !important;
+}
+
+html.light .text-\[\#8e918f\],
+html.light .text-\[\#9aa0a6\] {
+  color: #64748b !important;
+}
+
+html.light .hover\:bg-\[\#282a2c\]:hover,
+html.light .hover\:bg-\[\#25272a\]:hover,
+html.light .hover\:bg-\[\#202225\]:hover,
+html.light .hover\:bg-\[\#333538\]:hover {
+  background-color: #e2e8f0 !important;
+}
+
+/* Custom Scrollbars */
+.custom-scrollbar::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: #3a3d45;
+  border-radius: 9999px;
+}
+
+html.light .custom-scrollbar::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #4e525c;
+}
